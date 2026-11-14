@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}StockTrack{% endblock %} · StockTrack</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/icon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+{% from "_macros.html" import flashes %}
+{% if g.user %}
+<div class="shell">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="{{ url_for('dashboard.index') }}" aria-label="StockTrack, inicio">
+      <img src="{{ url_for('static', filename='img/logo-white.svg') }}" alt="StockTrack · Control total de inventarios" width="190" height="47">
+    </a>
+    <nav aria-label="Principal">
+      {% set ep = request.endpoint or '' %}
+      <a href="{{ url_for('dashboard.index') }}" class="{{ 'active' if ep.startswith('dashboard') }}">Panel</a>
+      <a href="{{ url_for('products.index') }}" class="{{ 'active' if ep.startswith('products') }}">Productos</a>
+      <a href="{{ url_for('movements.index') }}" class="{{ 'active' if ep.startswith('movements') }}">Movimientos</a>
+      <a href="{{ url_for('alerts.index') }}" class="{{ 'active' if ep.startswith('alerts') }}">Alertas
+        {% if open_alerts %}<span class="pill pill-warn" aria-label="{{ open_alerts }} alertas vigentes">{{ open_alerts }}</span>{% endif %}</a>
+      <a href="{{ url_for('reports.index') }}" class="{{ 'active' if ep.startswith('reports') }}">Reportes</a>
+      {% if can('audit.view') %}<a href="{{ url_for('audit.index') }}" class="{{ 'active' if ep.startswith('audit') }}">Auditoría</a>{% endif %}
+      {% if can('users.manage') %}<a href="{{ url_for('users.index') }}" class="{{ 'active' if ep.startswith('users') }}">Usuarios</a>{% endif %}
+    </nav>
+    <div class="sidebar-foot">
+      <div class="who">
+        <strong>{{ g.user.full_name }}</strong>
+        <span>{{ ROLE_LABELS[g.user.role] }}</span>
+      </div>
+      <a href="{{ url_for('auth.change_password') }}">Cambiar contraseña</a>
+      <form method="post" action="{{ url_for('auth.logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="link-btn" type="submit">Cerrar sesión</button>
+      </form>
+      <small>v{{ app_version }}</small>
+    </div>
+  </aside>
+  <main class="content" id="main">
+    <header class="topbar">
+      <button class="menu-btn" type="button" data-toggle="sidebar" aria-label="Abrir menú">☰</button>
+      <h1>{% block heading %}{% endblock %}</h1>
+      <div class="topbar-actions">
+        {% block actions %}{% endblock %}
+        <a class="bell" href="{{ url_for('alerts.index') }}" title="Notificaciones sin leer">🔔
+          {% if unread_notifications %}<span class="pill pill-bad">{{ unread_notifications }}</span>{% endif %}</a>
+      </div>
+    </header>
+    {{ flashes() }}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% else %}
+<main class="auth-wrap">
+  {{ flashes() }}
+  {% block auth %}{% endblock %}
+</main>
+{% endif %}
+<script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Reportes{% endblock %}
+{% block heading %}Reportes{% endblock %}
+{% block content %}
+<div class="grid-2">
+  <section class="card">
+    <header class="card-head"><h2>Inventario actual</h2></header>
+    <p class="muted">Existencias, estado de stock y valor del inventario a costo y a precio de venta.</p>
+    <form method="get" class="report-form" id="inventory-report">
+      <label class="field"><span class="label">Categoría</span>
+        <select name="categoria"><option value="">Todas</option>
+          {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select></label>
+      <label class="check"><input type="checkbox" name="escasez" value="1"> Solo productos en escasez</label>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit" formaction="{{ url_for('reports.inventory', fmt='pdf') }}">Descargar PDF</button>
+        <button class="btn" type="submit" formaction="{{ url_for('reports.inventory', fmt='xlsx') }}">Descargar Excel</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <header class="card-head"><h2>Movimientos de inventario</h2></header>
+    <p class="muted">Entradas, salidas y ajustes de un periodo, con usuario y referencia.</p>
+    <form method="get" class="report-form" id="movements-report">
+      <div class="form-grid">
+        <label class="field"><span class="label">Desde</span><input type="date" name="desde" value="{{ default_from }}"></label>
+        <label class="field"><span class="label">Hasta</span><input type="date" name="hasta" value="{{ default_to }}"></label>
+      </div>
+      <label class="field"><span class="label">Tipo</span>
+        <select name="tipo"><option value="">Todos</option>
+          {% for k, label in kinds.items() %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select></label>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit" formaction="{{ url_for('reports.movements', fmt='pdf') }}">Descargar PDF</button>
+        <button class="btn" type="submit" formaction="{{ url_for('reports.movements', fmt='xlsx') }}">Descargar Excel</button>
+      </div>
+    </form>
+  </section>
+</div>
+<p class="muted">Los PDF admiten hasta {{ config.REPORT_PDF_MAX_ROWS|num }} filas; para volúmenes mayores usa el Excel o aplica filtros.
+  Cada descarga queda registrada en la bitácora de auditoría.</p>
+{% endblock %}

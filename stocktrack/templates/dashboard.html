@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge %}
+{% block title %}Panel{% endblock %}
+{% block heading %}Panel de inventario{% endblock %}
+{% block actions %}
+  {% if can('movements.create') %}<a class="btn btn-primary" href="{{ url_for('movements.create') }}">+ Registrar movimiento</a>{% endif %}
+{% endblock %}
+{% block content %}
+{% set t = stats.totals %}
+<section class="kpis" aria-label="Indicadores">
+  <article class="kpi"><span>Productos activos</span><strong>{{ t.products|num }}</strong></article>
+  <article class="kpi"><span>Unidades en stock</span><strong>{{ t.units|num }}</strong></article>
+  <article class="kpi"><span>Valor a costo</span><strong>{{ t.cost_cents|money }}</strong></article>
+  <article class="kpi {{ 'kpi-warn' if t.low_count }}"><span>En escasez</span><strong>{{ t.low_count|num }}</strong></article>
+  <article class="kpi {{ 'kpi-bad' if t.out_count }}"><span>Agotados</span><strong>{{ t.out_count|num }}</strong></article>
+</section>
+
+<div class="grid-2">
+  <section class="card">
+    <header class="card-head"><h2>Productos que requieren reposición</h2>
+      <a href="{{ url_for('products.index', escasez=1) }}">Ver todos</a></header>
+    {% if stats.low %}
+    <table class="table">
+      <thead><tr><th>Producto</th><th class="num">Stock</th><th class="num">Mínimo</th><th>Estado</th></tr></thead>
+      <tbody>
+      {% for p in stats.low %}
+        <tr><td><a href="{{ url_for('products.detail', product_id=p.id) }}">{{ p.name }}</a><small class="muted block">{{ p.sku }}</small></td>
+            <td class="num"><strong>{{ p.stock|num }}</strong></td><td class="num">{{ p.min_stock|num }}</td>
+            <td>{{ status_badge(p.stock, p.min_stock) }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">✔ Ningún producto está por debajo de su stock mínimo.</p>{% endif %}
+  </section>
+
+  <section class="card">
+    <header class="card-head"><h2>Unidades por categoría</h2></header>
+    {% if stats.by_category %}
+    <ul class="bars">
+      {% for c in stats.by_category %}
+      <li>
+        <span class="bar-label">{{ c.category }}</span>
+        <svg class="bar" viewBox="0 0 100 10" preserveAspectRatio="none" role="img" aria-label="{{ c.units|num }} unidades">
+          <rect width="100" height="10" rx="2" class="bar-bg"/>
+          <rect width="{{ (c.units / max_units * 100)|round(1) }}" height="10" rx="2" class="bar-fg"/>
+        </svg>
+        <span class="bar-val">{{ c.units|num }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="empty">Aún no hay productos registrados.</p>{% endif %}
+  </section>
+</div>
+
+<div class="grid-2">
+  <section class="card">
+    <header class="card-head"><h2>Alertas vigentes</h2><a href="{{ url_for('alerts.index') }}">Ver alertas</a></header>
+    {% if active_alerts %}
+    <ul class="list">
+      {% for a in active_alerts %}
+      <li><div><a href="{{ url_for('products.detail', product_id=a.product_id) }}">{{ a.name }}</a>
+          <small class="muted block">{{ a.created_at|local_dt }} · stock {{ a.current_stock|num }} / mínimo {{ a.current_min|num }}</small></div>
+          <span class="badge {{ 'badge-warn' if a.status == 'abierta' else 'badge-info' }}">{{ 'Abierta' if a.status == 'abierta' else 'Reconocida' }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="empty">✔ No hay alertas vigentes.</p>{% endif %}
+  </section>
+
+  <section class="card">
+    <header class="card-head"><h2>Últimos movimientos</h2><a href="{{ url_for('movements.index') }}">Ver historial</a></header>
+    {% if recent %}
+    <ul class="list">
+      {% for m in recent %}
+      <li><div><a href="{{ url_for('products.detail', product_id=m.product_id) }}">{{ m.product_name }}</a>
+          <small class="muted block">{{ m.created_at|local_dt }} · {{ m.user_name }}</small></div>
+          <span class="delta {{ 'pos' if m.delta > 0 else 'neg' }}">{{ m.delta|signed }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="empty">Aún no hay movimientos.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,33 @@
+# Arranque rápido con PostgreSQL:  SECRET_KEY=... docker compose up --build
+# Después crea el primer administrador:
+#   docker compose exec web flask --app stocktrack create-user --role admin
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: stocktrack
+      POSTGRES_USER: stocktrack
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cambia-esta-clave}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stocktrack"]
+      interval: 5s
+      retries: 10
+  web:
+    build: .
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      STOCKTRACK_ENV: production
+      SECRET_KEY: ${SECRET_KEY:?define SECRET_KEY}
+      DATABASE_URL: postgresql://stocktrack:${POSTGRES_PASSWORD:-cambia-esta-clave}@db:5432/stocktrack
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      MAIL_ENABLED: ${MAIL_ENABLED:-false}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-StockTrack <alertas@stocktrack.local>}
+    ports: ["8000:8000"]
+volumes:
+  pgdata:

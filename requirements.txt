@@ -1,0 +1,9 @@
+# Aplicación (versiones con las que se probó el proyecto)
+Flask>=3.1,<4
+Werkzeug>=3.1,<4
+XlsxWriter>=3.2,<4
+reportlab>=4,<6
+
+# Producción: PostgreSQL y servidor WSGI (no se ejecutaron en el entorno de pruebas; ver README)
+psycopg2-binary>=2.9,<3
+gunicorn>=22

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge, csrf %}
+{% block title %}{{ product.name }}{% endblock %}
+{% block heading %}{{ product.name }}{% endblock %}
+{% block actions %}
+  {% if can('movements.create') and product.is_active %}<a class="btn btn-primary" href="{{ url_for('movements.create', sku=product.sku) }}">Registrar movimiento</a>{% endif %}
+  {% if can('products.edit') %}<a class="btn" href="{{ url_for('products.edit', product_id=product.id) }}">Editar</a>{% endif %}
+{% endblock %}
+{% block content %}
+<div class="grid-2">
+  <section class="card">
+    <header class="card-head"><h2>Ficha del producto</h2>
+      {% if product.is_active %}{{ status_badge(product.stock, product.min_stock) }}{% else %}<span class="badge badge-muted">Archivado</span>{% endif %}</header>
+    <dl class="facts">
+      <div><dt>SKU</dt><dd class="mono">{{ product.sku }}</dd></div>
+      <div><dt>Categoría</dt><dd>{{ product.category or '—' }}</dd></div>
+      <div><dt>Marca</dt><dd>{{ product.brand or '—' }}</dd></div>
+      <div><dt>Ubicación</dt><dd>{{ product.location or '—' }}</dd></div>
+      <div><dt>Stock actual</dt><dd><strong class="big">{{ product.stock|num }}</strong> unidades</dd></div>
+      <div><dt>Stock mínimo</dt><dd>{{ product.min_stock|num }}</dd></div>
+      <div><dt>Costo unitario</dt><dd>{{ product.cost_cents|money }}</dd></div>
+      <div><dt>Precio de venta</dt><dd>{{ product.price_cents|money }}</dd></div>
+      <div><dt>Valor a costo</dt><dd>{{ (product.stock * product.cost_cents)|money }}</dd></div>
+      <div><dt>Actualizado</dt><dd>{{ product.updated_at|local_dt }}</dd></div>
+    </dl>
+    {% if product.description %}<p class="desc">{{ product.description }}</p>{% endif %}
+    {% if can('products.edit') %}
+    <form method="post" class="inline-form"
+          action="{{ url_for('products.archive' if product.is_active else 'products.restore', product_id=product.id) }}"
+          {% if product.is_active %}data-confirm="¿Archivar este producto? Dejará de contar como registro activo y se cerrarán sus alertas."{% endif %}>
+      {{ csrf() }}
+      <button class="btn {{ 'btn-danger' if product.is_active else '' }}" type="submit">{{ 'Archivar producto' if product.is_active else 'Restaurar producto' }}</button>
+    </form>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <header class="card-head"><h2>Cambios registrados</h2></header>
+    {% if history %}
+    <ul class="list">
+      {% for h in history %}
+      <li><div><strong>{{ h.action }}</strong> <small class="muted">{{ h.username or 'sistema' }}</small>
+          {% if h.detail %}<small class="muted block">{{ h.detail }}</small>{% endif %}</div>
+          <small class="muted">{{ h.created_at|local_dt }}</small></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="empty">Sin cambios registrados.</p>{% endif %}
+  </section>
+</div>
+
+<section class="card flush">
+  <header class="card-head pad"><h2>Movimientos recientes ({{ movement_total|num }} en total)</h2>
+    <a href="{{ url_for('movements.index', sku=product.sku) }}">Ver todos</a></header>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Fecha</th><th>Tipo</th><th class="num">Cantidad</th><th class="num">Variación</th><th class="num">Stock</th><th>Referencia</th><th>Usuario</th></tr></thead>
+    <tbody>
+    {% for m in movements %}
+      <tr><td>{{ m.created_at|local_dt }}</td><td>{{ m.kind|capitalize }}</td><td class="num">{{ m.quantity|num }}</td>
+          <td class="num"><span class="delta {{ 'pos' if m.delta > 0 else 'neg' }}">{{ m.delta|signed }}</span></td>
+          <td class="num">{{ m.stock_before|num }} → {{ m.stock_after|num }}</td><td>{{ m.reference or '—' }}</td><td>{{ m.user_name }}</td></tr>
+    {% else %}<tr><td colspan="7" class="empty">Sin movimientos.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

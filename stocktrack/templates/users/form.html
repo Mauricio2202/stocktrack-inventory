@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_macros.html" import field, csrf %}
+{% set editing = user is not none %}
+{% block title %}{{ 'Editar usuario' if editing else 'Nuevo usuario' }}{% endblock %}
+{% block heading %}{{ 'Editar usuario' if editing else 'Nuevo usuario' }}{% endblock %}
+{% block content %}
+<form class="card form narrow" method="post" novalidate>
+  {{ csrf() }}
+  {% if editing %}
+    <p><span class="label">Usuario</span><br><strong class="mono">{{ user.username }}</strong></p>
+  {% else %}
+    {{ field('username', 'Usuario', values, errors, required=True, hint='Minúsculas, números, punto, guion o guion bajo (3-32)', attrs='autocomplete="off" maxlength="32"') }}
+  {% endif %}
+  {{ field('full_name', 'Nombre completo', values, errors, required=True, attrs='maxlength="100"') }}
+  {{ field('email', 'Correo electrónico', values, errors, type='email', hint='Necesario para recibir alertas de escasez por correo', attrs='maxlength="120"') }}
+  <label class="field {{ 'has-error' if errors.get('role') }}"><span class="label">Rol <em>*</em></span>
+    <select name="role">
+      {% for r in roles %}<option value="{{ r }}" {{ 'selected' if r == values.get('role') }}>{{ ROLE_LABELS[r] }}</option>{% endfor %}
+    </select>{% if errors.get('role') %}<span class="err">{{ errors.role }}</span>{% endif %}</label>
+  <label class="check"><input type="checkbox" name="receive_alerts" value="1" {{ 'checked' if values.get('receive_alerts') }}> Recibir alertas de escasez por correo</label>
+  {% if not editing %}
+    {{ field('password', 'Contraseña inicial', values, errors, type='password', required=True, hint='Mínimo 8 caracteres, con letras y números', attrs='autocomplete="new-password"') }}
+    <label class="check"><input type="checkbox" name="must_change" value="1" checked> Obligar a cambiarla en el primer acceso</label>
+  {% endif %}
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">{{ 'Guardar cambios' if editing else 'Crear usuario' }}</button>
+    <a class="btn btn-ghost" href="{{ url_for('users.index') }}">Cancelar</a>
+  </div>
+</form>
+{% endblock %}

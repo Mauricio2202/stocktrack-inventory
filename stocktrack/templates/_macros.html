@@ -1,0 +1,41 @@
+{% macro flashes() %}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flashes" role="status">
+      {% for category, message in messages %}
+        <div class="flash flash-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endwith %}
+{% endmacro %}
+
+{% macro field(name, label, values, errors, type='text', required=False, hint=None, attrs='') %}
+  <label class="field {{ 'has-error' if errors.get(name) }}">
+    <span class="label">{{ label }}{% if required %} <em>*</em>{% endif %}</span>
+    <input type="{{ type }}" name="{{ name }}" value="{{ values.get(name, '') if values.get(name) is not none else '' }}"
+           {% if required %}required{% endif %} {{ attrs|safe }}>
+    {% if errors.get(name) %}<span class="err">{{ errors[name] }}</span>{% elif hint %}<span class="hint">{{ hint }}</span>{% endif %}
+  </label>
+{% endmacro %}
+
+{% macro status_badge(stock, min_stock) %}
+  {% if stock == 0 %}<span class="badge badge-bad">Agotado</span>
+  {% elif min_stock > 0 and stock <= min_stock %}<span class="badge badge-warn">Escasez</span>
+  {% else %}<span class="badge badge-ok">Normal</span>{% endif %}
+{% endmacro %}
+
+{% macro render_pager(p) %}
+  {% if p.pages > 1 %}
+  <nav class="pager" aria-label="Paginación">
+    <span>{{ p.start }}–{{ p.end }} de {{ p.total|num }}</span>
+    <div>
+      {% if p.has_prev %}<a href="{{ page_url(p.page - 1) }}">← Anterior</a>{% endif %}
+      <strong>Página {{ p.page }} de {{ p.pages }}</strong>
+      {% if p.has_next %}<a href="{{ page_url(p.page + 1) }}">Siguiente →</a>{% endif %}
+    </div>
+  </nav>
+  {% elif p.total %}<p class="muted pager-note">{{ p.total|num }} registro(s)</p>{% endif %}
+{% endmacro %}
+
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}

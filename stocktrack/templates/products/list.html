@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge, render_pager %}
+{% block title %}Productos{% endblock %}
+{% block heading %}Productos{% endblock %}
+{% block actions %}
+  {% if can('products.edit') %}<a class="btn btn-primary" href="{{ url_for('products.create') }}">+ Nuevo producto</a>{% endif %}
+{% endblock %}
+{% block content %}
+<form class="filters card" method="get" action="{{ url_for('products.index') }}">
+  <label class="field grow"><span class="label">Buscar</span>
+    <input type="search" name="q" value="{{ args.q }}" placeholder="SKU, nombre o marca"></label>
+  <label class="field"><span class="label">Categoría</span>
+    <select name="categoria"><option value="">Todas</option>
+      {% for c in categories %}<option value="{{ c }}" {{ 'selected' if c == args.category }}>{{ c }}</option>{% endfor %}
+    </select></label>
+  <label class="field"><span class="label">Estado</span>
+    <select name="estado">
+      <option value="active" {{ 'selected' if args.status == 'active' }}>Activos</option>
+      <option value="archived" {{ 'selected' if args.status == 'archived' }}>Archivados</option>
+      <option value="all" {{ 'selected' if args.status == 'all' }}>Todos</option>
+    </select></label>
+  <label class="check"><input type="checkbox" name="escasez" value="1" {{ 'checked' if args.low_only }}> Solo escasez</label>
+  <button class="btn" type="submit">Filtrar</button>
+  <a class="btn btn-ghost" href="{{ url_for('products.index') }}">Limpiar</a>
+</form>
+
+<p class="muted capacity">Capacidad: {{ active_count|num }} de {{ max_active|num }} registros activos
+  ({{ (active_count / max_active * 100)|round(1) }}%).</p>
+
+<section class="card flush">
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr>
+      {% macro sortable(key, label, cls='') %}
+        {% set nxt = 'desc' if args.sort == key and args.direction == 'asc' else 'asc' %}
+        <th class="{{ cls }}"><a href="{{ url_for('products.index', **sort_params(key, nxt)) }}">{{ label }}{% if args.sort == key %} {{ '▲' if args.direction == 'asc' else '▼' }}{% endif %}</a></th>
+      {% endmacro %}
+      {{ sortable('sku', 'SKU') }}{{ sortable('name', 'Producto') }}{{ sortable('category', 'Categoría') }}
+      {{ sortable('stock', 'Stock', 'num') }}<th class="num">Mínimo</th><th>Estado</th>{{ sortable('price', 'Precio', 'num') }}<th></th>
+    </tr></thead>
+    <tbody>
+    {% for p in rows %}
+      <tr class="{{ 'row-archived' if not p.is_active }}">
+        <td class="mono">{{ p.sku }}</td>
+        <td><a href="{{ url_for('products.detail', product_id=p.id) }}">{{ p.name }}</a>
+          {% if p.brand %}<small class="muted block">{{ p.brand }}{% if p.location %} · {{ p.location }}{% endif %}</small>{% endif %}</td>
+        <td>{{ p.category or '—' }}</td>
+        <td class="num"><strong>{{ p.stock|num }}</strong></td>
+        <td class="num">{{ p.min_stock|num }}</td>
+        <td>{% if p.is_active %}{{ status_badge(p.stock, p.min_stock) }}{% else %}<span class="badge badge-muted">Archivado</span>{% endif %}</td>
+        <td class="num">{{ p.price_cents|money }}</td>
+        <td class="actions">
+          {% if can('movements.create') and p.is_active %}<a href="{{ url_for('movements.create', sku=p.sku) }}">Mover</a>{% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" class="empty">No se encontraron productos con esos filtros.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{{ render_pager(pager) }}
+{% endblock %}

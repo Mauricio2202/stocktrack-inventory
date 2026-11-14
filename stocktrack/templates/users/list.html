@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf %}
+{% block title %}Usuarios{% endblock %}
+{% block heading %}Usuarios y roles{% endblock %}
+{% block actions %}<a class="btn btn-primary" href="{{ url_for('users.create') }}">+ Nuevo usuario</a>{% endblock %}
+{% block content %}
+<section class="card flush">
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Correo</th><th>Alertas</th><th>Estado</th><th>Último acceso</th><th></th></tr></thead>
+    <tbody>
+    {% for u in rows %}
+      <tr class="{{ 'row-archived' if not u.is_active }}">
+        <td class="mono">{{ u.username }}</td><td>{{ u.full_name }}</td><td>{{ ROLE_LABELS[u.role] }}</td>
+        <td>{{ u.email or '—' }}</td><td>{{ 'Sí' if u.receive_alerts else 'No' }}</td>
+        <td><span class="badge {{ 'badge-ok' if u.is_active else 'badge-muted' }}">{{ 'Activo' if u.is_active else 'Inactivo' }}</span></td>
+        <td>{{ u.last_login_at|local_dt if u.last_login_at else 'Nunca' }}</td>
+        <td class="actions">
+          <a href="{{ url_for('users.edit', user_id=u.id) }}">Editar</a>
+          <form method="post" action="{{ url_for('users.reset_password', user_id=u.id) }}" data-confirm="¿Generar una contraseña temporal para {{ u.username }}?">{{ csrf() }}<button class="link-btn" type="submit">Restablecer clave</button></form>
+          {% if u.id != g.user.id %}
+          <form method="post" action="{{ url_for('users.toggle', user_id=u.id) }}">{{ csrf() }}<button class="link-btn" type="submit">{{ 'Desactivar' if u.is_active else 'Activar' }}</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+<section class="card">
+  <header class="card-head"><h2>Permisos por rol</h2></header>
+  <table class="table compact">
+    <thead><tr><th>Capacidad</th><th>Administrador</th><th>Gerente</th><th>Almacenista</th><th>Consulta</th></tr></thead>
+    <tbody>
+      <tr><td>Ver productos, movimientos, alertas y reportes</td><td>✔</td><td>✔</td><td>✔</td><td>✔</td></tr>
+      <tr><td>Registrar movimientos y reconocer alertas</td><td>✔</td><td>✔</td><td>✔</td><td>—</td></tr>
+      <tr><td>Crear, editar y archivar productos</td><td>✔</td><td>✔</td><td>—</td><td>—</td></tr>
+      <tr><td>Ver bitácora de auditoría</td><td>✔</td><td>✔</td><td>—</td><td>—</td></tr>
+      <tr><td>Administrar usuarios</td><td>✔</td><td>—</td><td>—</td><td>—</td></tr>
+    </tbody>
+  </table>
+</section>
+{% endblock %}

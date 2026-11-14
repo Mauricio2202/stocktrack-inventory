@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "_macros.html" import render_pager, csrf %}
+{% block title %}Alertas{% endblock %}
+{% block heading %}Alertas de escasez{% endblock %}
+{% block content %}
+<nav class="tabs" aria-label="Filtro de alertas">
+  <a href="{{ url_for('alerts.index', estado='vigentes') }}" class="{{ 'active' if state == 'vigentes' }}">Vigentes</a>
+  <a href="{{ url_for('alerts.index', estado='resuelta') }}" class="{{ 'active' if state == 'resuelta' }}">Resueltas</a>
+  <a href="{{ url_for('alerts.index', estado='todas') }}" class="{{ 'active' if state == 'todas' }}">Todas</a>
+</nav>
+
+<section class="card flush">
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Detectada</th><th>Producto</th><th class="num">Stock actual</th><th class="num">Mínimo</th><th>Estado</th><th>Correo</th><th></th></tr></thead>
+    <tbody>
+    {% for a in rows %}
+      <tr>
+        <td>{{ a.created_at|local_dt }}</td>
+        <td><a href="{{ url_for('products.detail', product_id=a.product_id) }}">{{ a.name }}</a><small class="muted block">{{ a.sku }}</small></td>
+        <td class="num"><strong>{{ a.current_stock|num }}</strong></td><td class="num">{{ a.current_min|num }}</td>
+        <td>{% if a.status == 'abierta' %}<span class="badge badge-warn">Abierta</span>
+            {% elif a.status == 'reconocida' %}<span class="badge badge-info">Reconocida</span>{% if a.ack_name %}<small class="muted block">por {{ a.ack_name }}</small>{% endif %}
+            {% else %}<span class="badge badge-ok">Resuelta</span>{% if a.resolved_at %}<small class="muted block">{{ a.resolved_at|local_dt }}</small>{% endif %}{% endif %}</td>
+        <td>{% if a.email_status == 'enviado' %}<span class="badge badge-ok" title="{{ a.email_detail }}">Enviado</span>
+            {% elif a.email_status == 'error' %}<span class="badge badge-bad" title="{{ a.email_detail }}">Error</span>
+            {% elif a.email_status == 'omitido' %}<span class="badge badge-muted" title="{{ a.email_detail }}">Omitido</span>
+            {% else %}<span class="badge badge-muted">Pendiente</span>{% endif %}</td>
+        <td class="actions">
+          {% if a.status == 'abierta' and can('alerts.ack') %}
+          <form method="post" action="{{ url_for('alerts.acknowledge', alert_id=a.id) }}">{{ csrf() }}<button class="btn btn-sm" type="submit">Reconocer</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}<tr><td colspan="7" class="empty">✔ No hay alertas en esta vista.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{{ render_pager(pager) }}
+
+<section class="card">
+  <header class="card-head"><h2>Mis notificaciones</h2>
+    {% if notifications|selectattr('is_read', 'equalto', 0)|list %}
+    <form method="post" action="{{ url_for('alerts.mark_read') }}">{{ csrf() }}<button class="btn btn-sm" type="submit">Marcar todas como leídas</button></form>{% endif %}
+  </header>
+  {% if notifications %}
+  <ul class="list">
+    {% for n in notifications %}
+    <li class="{{ '' if n.is_read else 'unread' }}"><div>{{ n.message }}</div><small class="muted">{{ n.created_at|local_dt }}</small></li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="empty">No tienes notificaciones.</p>{% endif %}
+</section>
+{% endblock %}

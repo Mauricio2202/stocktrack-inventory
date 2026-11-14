@@ -1,0 +1,203 @@
+{
+  "generated_at": "2026-11-14T16:12:20-06:00",
+  "environment": {
+    "python": "3.13.18",
+    "database": "SQLite (pruebas locales)"
+  },
+  "results": [
+    {
+      "case_id": "PA-01.1",
+      "test": "tests/acceptance/test_pa01_reports.py::test_inventory_pdf",
+      "outcome": "passed",
+      "duration_s": 0.576,
+      "message": "",
+      "metrics": {
+        "pdf_paginas": 2,
+        "pdf_bytes": 48436,
+        "filas": 30
+      }
+    },
+    {
+      "case_id": "PA-01.2",
+      "test": "tests/acceptance/test_pa01_reports.py::test_inventory_xlsx",
+      "outcome": "passed",
+      "duration_s": 0.461,
+      "message": "",
+      "metrics": {
+        "xlsx_filas": 30,
+        "xlsx_bytes": 8603
+      }
+    },
+    {
+      "case_id": "PA-01.3",
+      "test": "tests/acceptance/test_pa01_reports.py::test_movements_pdf",
+      "outcome": "passed",
+      "duration_s": 0.471,
+      "message": "",
+      "metrics": {
+        "movimientos": 33
+      }
+    },
+    {
+      "case_id": "PA-01.4",
+      "test": "tests/acceptance/test_pa01_reports.py::test_movements_xlsx_and_filters",
+      "outcome": "passed",
+      "duration_s": 0.463,
+      "message": "",
+      "metrics": {
+        "movimientos_excel": 33
+      }
+    },
+    {
+      "case_id": "PA-01.5",
+      "test": "tests/acceptance/test_pa01_reports.py::test_filters_match_between_formats",
+      "outcome": "passed",
+      "duration_s": 0.533,
+      "message": "",
+      "metrics": {
+        "filtros_verificados": 2
+      }
+    },
+    {
+      "case_id": "PA-02.1",
+      "test": "tests/acceptance/test_pa02_alerts.py::test_alert_email_is_delivered",
+      "outcome": "passed",
+      "duration_s": 0.441,
+      "message": "",
+      "metrics": {
+        "correos_recibidos": 1,
+        "destinatarios": 2
+      }
+    },
+    {
+      "case_id": "PA-02.2",
+      "test": "tests/acceptance/test_pa02_alerts.py::test_in_app_notifications_by_role",
+      "outcome": "passed",
+      "duration_s": 0.532,
+      "message": "",
+      "metrics": {
+        "notificaciones_generadas": 3
+      }
+    },
+    {
+      "case_id": "PA-02.3",
+      "test": "tests/acceptance/test_pa02_alerts.py::test_single_alert_and_email_per_episode",
+      "outcome": "passed",
+      "duration_s": 0.532,
+      "message": "",
+      "metrics": {
+        "alertas": 2,
+        "correos": 2
+      }
+    },
+    {
+      "case_id": "PA-02.4",
+      "test": "tests/acceptance/test_pa02_alerts.py::test_alert_resolves_and_threshold_is_inclusive",
+      "outcome": "passed",
+      "duration_s": 0.439,
+      "message": "",
+      "metrics": {
+        "umbral_inclusivo": true
+      }
+    },
+    {
+      "case_id": "PA-02.5",
+      "test": "tests/acceptance/test_pa02_alerts.py::test_smtp_failure_does_not_break_movements",
+      "outcome": "passed",
+      "duration_s": 0.441,
+      "message": "",
+      "metrics": {
+        "detalle_error": "ConnectionRefusedError: [Errno 111] Connection refused"
+      }
+    },
+    {
+      "case_id": "PA-03.1",
+      "test": "tests/acceptance/test_pa03_concurrency.py::test_ten_concurrent_users_mixed_workflow",
+      "outcome": "passed",
+      "duration_s": 7.16,
+      "message": "",
+      "metrics": {
+        "usuarios_concurrentes": 10,
+        "solicitudes": 930,
+        "duracion_total_s": 4.88,
+        "paginas_mediana_ms": 35.6,
+        "paginas_p95_ms": 75.2,
+        "paginas_max_ms": 188.7,
+        "escrituras_p95_ms": 91.4,
+        "reporte_excel_p95_ms": 541.5,
+        "base_un_usuario_mediana_ms": 3.1,
+        "errores": 0,
+        "rendimiento_solicitudes_por_s": 190.7
+      }
+    },
+    {
+      "case_id": "PA-03.2",
+      "test": "tests/acceptance/test_pa03_concurrency.py::test_no_overselling_under_concurrency",
+      "outcome": "passed",
+      "duration_s": 2.486,
+      "message": "",
+      "metrics": {
+        "intentos": 100,
+        "aceptadas": 50,
+        "rechazadas": 50,
+        "stock_final": 0
+      }
+    },
+    {
+      "case_id": "PA-03.3",
+      "test": "tests/acceptance/test_pa03_concurrency.py::test_data_integrity_after_simultaneous_writes",
+      "outcome": "passed",
+      "duration_s": 3.229,
+      "message": "",
+      "metrics": {
+        "movimientos_registrados": 297,
+        "huecos_en_cadena": 0,
+        "alertas_duplicadas": 0,
+        "productos_en_escasez": 1
+      }
+    },
+    {
+      "case_id": "RN-01.1",
+      "test": "tests/acceptance/test_rn_roles_and_capacity.py::test_role_permission_matrix",
+      "outcome": "passed",
+      "duration_s": 0.846,
+      "message": "",
+      "metrics": {
+        "verificaciones": 72,
+        "roles": 4
+      }
+    },
+    {
+      "case_id": "RN-02.1",
+      "test": "tests/acceptance/test_rn_roles_and_capacity.py::test_active_record_cap_is_enforced",
+      "outcome": "passed",
+      "duration_s": 0.466,
+      "message": "",
+      "metrics": {
+        "limite_probado": 3,
+        "carrera_aceptadas": 2,
+        "carrera_rechazadas": 8
+      }
+    },
+    {
+      "case_id": "RN-02.2",
+      "test": "tests/acceptance/test_rn_roles_and_capacity.py::test_performance_with_100k_active_records",
+      "outcome": "passed",
+      "duration_s": 15.641,
+      "message": "",
+      "metrics": {
+        "registros_activos": 100000,
+        "carga_masiva_s": 0.32,
+        "panel_ms": 74.3,
+        "listado_ms": 42.7,
+        "pagina_ultima_ms": 37.1,
+        "busqueda_ms": 100.4,
+        "filtro_categoria_ms": 38.2,
+        "escasez_ms": 43.4,
+        "excel_100k_s": 7.09,
+        "excel_bytes": 5532569,
+        "excel_filas": 100000
+      }
+    }
+  ]
+}
