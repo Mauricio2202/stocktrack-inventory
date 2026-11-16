@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-14T16:12:20-06:00",
+  "generated_at": "2026-11-15T18:25:08-06:00",
   "environment": {
     "python": "3.13.18",
     "database": "SQLite (pruebas locales)"
@@ -9,11 +9,11 @@
       "case_id": "PA-01.1",
       "test": "tests/acceptance/test_pa01_reports.py::test_inventory_pdf",
       "outcome": "passed",
-      "duration_s": 0.576,
+      "duration_s": 0.579,
       "message": "",
       "metrics": {
         "pdf_paginas": 2,
-        "pdf_bytes": 48436,
+        "pdf_bytes": 69375,
         "filas": 30
       }
     },
@@ -21,18 +21,18 @@
       "case_id": "PA-01.2",
       "test": "tests/acceptance/test_pa01_reports.py::test_inventory_xlsx",
       "outcome": "passed",
-      "duration_s": 0.461,
+      "duration_s": 0.451,
       "message": "",
       "metrics": {
         "xlsx_filas": 30,
-        "xlsx_bytes": 8603
+        "xlsx_bytes": 9172
       }
     },
     {
       "case_id": "PA-01.3",
       "test": "tests/acceptance/test_pa01_reports.py::test_movements_pdf",
       "outcome": "passed",
-      "duration_s": 0.471,
+      "duration_s": 0.482,
       "message": "",
       "metrics": {
         "movimientos": 33
@@ -42,7 +42,7 @@
       "case_id": "PA-01.4",
       "test": "tests/acceptance/test_pa01_reports.py::test_movements_xlsx_and_filters",
       "outcome": "passed",
-      "duration_s": 0.463,
+      "duration_s": 0.459,
       "message": "",
       "metrics": {
         "movimientos_excel": 33
@@ -52,7 +52,7 @@
       "case_id": "PA-01.5",
       "test": "tests/acceptance/test_pa01_reports.py::test_filters_match_between_formats",
       "outcome": "passed",
-      "duration_s": 0.533,
+      "duration_s": 0.578,
       "message": "",
       "metrics": {
         "filtros_verificados": 2
@@ -62,7 +62,7 @@
       "case_id": "PA-02.1",
       "test": "tests/acceptance/test_pa02_alerts.py::test_alert_email_is_delivered",
       "outcome": "passed",
-      "duration_s": 0.441,
+      "duration_s": 0.469,
       "message": "",
       "metrics": {
         "correos_recibidos": 1,
@@ -73,17 +73,17 @@
       "case_id": "PA-02.2",
       "test": "tests/acceptance/test_pa02_alerts.py::test_in_app_notifications_by_role",
       "outcome": "passed",
-      "duration_s": 0.532,
+      "duration_s": 0.531,
       "message": "",
       "metrics": {
-        "notificaciones_generadas": 3
+        "notificaciones_generadas": 2
       }
     },
     {
       "case_id": "PA-02.3",
       "test": "tests/acceptance/test_pa02_alerts.py::test_single_alert_and_email_per_episode",
       "outcome": "passed",
-      "duration_s": 0.532,
+      "duration_s": 0.461,
       "message": "",
       "metrics": {
         "alertas": 2,
@@ -94,7 +94,7 @@
       "case_id": "PA-02.4",
       "test": "tests/acceptance/test_pa02_alerts.py::test_alert_resolves_and_threshold_is_inclusive",
       "outcome": "passed",
-      "duration_s": 0.439,
+      "duration_s": 0.534,
       "message": "",
       "metrics": {
         "umbral_inclusivo": true
@@ -104,7 +104,7 @@
       "case_id": "PA-02.5",
       "test": "tests/acceptance/test_pa02_alerts.py::test_smtp_failure_does_not_break_movements",
       "outcome": "passed",
-      "duration_s": 0.441,
+      "duration_s": 0.43,
       "message": "",
       "metrics": {
         "detalle_error": "ConnectionRefusedError: [Errno 111] Connection refused"
@@ -114,32 +114,32 @@
       "case_id": "PA-03.1",
       "test": "tests/acceptance/test_pa03_concurrency.py::test_ten_concurrent_users_mixed_workflow",
       "outcome": "passed",
-      "duration_s": 7.16,
+      "duration_s": 9.296,
       "message": "",
       "metrics": {
         "usuarios_concurrentes": 10,
-        "solicitudes": 930,
-        "duracion_total_s": 4.88,
-        "paginas_mediana_ms": 35.6,
-        "paginas_p95_ms": 75.2,
-        "paginas_max_ms": 188.7,
-        "escrituras_p95_ms": 91.4,
-        "reporte_excel_p95_ms": 541.5,
-        "base_un_usuario_mediana_ms": 3.1,
+        "solicitudes": 885,
+        "duracion_total_s": 6.59,
+        "paginas_mediana_ms": 47.2,
+        "paginas_p95_ms": 106.3,
+        "paginas_max_ms": 234.2,
+        "escrituras_p95_ms": 116.9,
+        "reporte_excel_p95_ms": 845.0,
+        "base_un_usuario_mediana_ms": 5.5,
         "errores": 0,
-        "rendimiento_solicitudes_por_s": 190.7
+        "rendimiento_solicitudes_por_s": 134.3
       }
     },
     {
       "case_id": "PA-03.2",
       "test": "tests/acceptance/test_pa03_concurrency.py::test_no_overselling_under_concurrency",
       "outcome": "passed",
-      "duration_s": 2.486,
+      "duration_s": 2.623,
       "message": "",
       "metrics": {
-        "intentos": 100,
+        "intentos": 70,
         "aceptadas": 50,
-        "rechazadas": 50,
+        "rechazadas": 20,
         "stock_final": 0
       }
     },
@@ -147,31 +147,31 @@
       "case_id": "PA-03.3",
       "test": "tests/acceptance/test_pa03_concurrency.py::test_data_integrity_after_simultaneous_writes",
       "outcome": "passed",
-      "duration_s": 3.229,
+      "duration_s": 3.39,
       "message": "",
       "metrics": {
-        "movimientos_registrados": 297,
+        "movimientos_registrados": 158,
         "huecos_en_cadena": 0,
         "alertas_duplicadas": 0,
-        "productos_en_escasez": 1
+        "productos_en_escasez": 5
       }
     },
     {
       "case_id": "RN-01.1",
       "test": "tests/acceptance/test_rn_roles_and_capacity.py::test_role_permission_matrix",
       "outcome": "passed",
-      "duration_s": 0.846,
+      "duration_s": 1.006,
       "message": "",
       "metrics": {
-        "verificaciones": 72,
-        "roles": 4
+        "verificaciones": 110,
+        "roles": 3
       }
     },
     {
       "case_id": "RN-02.1",
       "test": "tests/acceptance/test_rn_roles_and_capacity.py::test_active_record_cap_is_enforced",
       "outcome": "passed",
-      "duration_s": 0.466,
+      "duration_s": 0.44,
       "message": "",
       "metrics": {
         "limite_probado": 3,
@@ -183,20 +183,216 @@
       "case_id": "RN-02.2",
       "test": "tests/acceptance/test_rn_roles_and_capacity.py::test_performance_with_100k_active_records",
       "outcome": "passed",
-      "duration_s": 15.641,
+      "duration_s": 21.912,
       "message": "",
       "metrics": {
         "registros_activos": 100000,
-        "carga_masiva_s": 0.32,
-        "panel_ms": 74.3,
-        "listado_ms": 42.7,
-        "pagina_ultima_ms": 37.1,
-        "busqueda_ms": 100.4,
-        "filtro_categoria_ms": 38.2,
-        "escasez_ms": 43.4,
-        "excel_100k_s": 7.09,
-        "excel_bytes": 5532569,
+        "carga_masiva_s": 0.36,
+        "panel_ms": 102.7,
+        "listado_ms": 95.1,
+        "pagina_ultima_ms": 98.3,
+        "busqueda_ms": 177.8,
+        "filtro_categoria_ms": 74.7,
+        "escasez_ms": 84.1,
+        "excel_100k_s": 10.32,
+        "excel_bytes": 6773701,
         "excel_filas": 100000
+      }
+    },
+    {
+      "case_id": "RNF.1",
+      "test": "tests/acceptance/test_rf_by_user.py::test_idle_session_timeout_is_configurable",
+      "outcome": "passed",
+      "duration_s": 0.799,
+      "message": "",
+      "metrics": {
+        "minutos_configurados": 30
+      }
+    },
+    {
+      "case_id": "RNF.2",
+      "test": "tests/acceptance/test_rf_by_user.py::test_no_duplicate_movements_on_double_submit",
+      "outcome": "passed",
+      "duration_s": 0.438,
+      "message": "",
+      "metrics": {
+        "envios_repetidos": 3,
+        "movimientos_guardados": 1
+      }
+    },
+    {
+      "case_id": "RNF.3",
+      "test": "tests/acceptance/test_rf_by_user.py::test_movement_is_atomic_no_partial_updates",
+      "outcome": "passed",
+      "duration_s": 0.288,
+      "message": "",
+      "metrics": {
+        "operaciones_revertidas": 2
+      }
+    },
+    {
+      "case_id": "RNF.4",
+      "test": "tests/acceptance/test_rf_by_user.py::test_integrity_rules_in_database",
+      "outcome": "passed",
+      "duration_s": 0.291,
+      "message": "",
+      "metrics": {
+        "reglas_probadas": 5
+      }
+    },
+    {
+      "case_id": "RNF.5",
+      "test": "tests/acceptance/test_rf_by_user.py::test_usability_required_fields_and_clear_messages",
+      "outcome": "passed",
+      "duration_s": 0.599,
+      "message": "",
+      "metrics": {
+        "mensajes_verificados": 7
+      }
+    },
+    {
+      "case_id": "RNF.6",
+      "test": "tests/acceptance/test_rf_by_user.py::test_responsive_layout_and_browser_compat",
+      "outcome": "passed",
+      "duration_s": 3.156,
+      "message": "",
+      "metrics": {
+        "navegadores": "chromium",
+        "resoluciones": 3,
+        "paginas": 7,
+        "paginas_con_desborde": 0
+      }
+    },
+    {
+      "case_id": "RU-A.1",
+      "test": "tests/acceptance/test_rf_by_user.py::test_admin_login_by_email_and_dashboard",
+      "outcome": "passed",
+      "duration_s": 0.542,
+      "message": "",
+      "metrics": {
+        "roles_con_panel_propio": 3
+      }
+    },
+    {
+      "case_id": "RU-A.2",
+      "test": "tests/acceptance/test_rf_by_user.py::test_admin_manages_users_and_roles",
+      "outcome": "passed",
+      "duration_s": 0.677,
+      "message": "",
+      "metrics": {
+        "operaciones": 4
+      }
+    },
+    {
+      "case_id": "RU-A.3",
+      "test": "tests/acceptance/test_rf_by_user.py::test_admin_manages_products_categories_and_min_stock",
+      "outcome": "passed",
+      "duration_s": 0.448,
+      "message": "",
+      "metrics": {
+        "operaciones": 9
+      }
+    },
+    {
+      "case_id": "RU-A.4",
+      "test": "tests/acceptance/test_rf_by_user.py::test_admin_validates_second_level_reservations",
+      "outcome": "passed",
+      "duration_s": 0.594,
+      "message": "",
+      "metrics": {
+        "stock_final": 15
+      }
+    },
+    {
+      "case_id": "RU-A.5",
+      "test": "tests/acceptance/test_rf_by_user.py::test_admin_supervises_movements_alerts_and_history",
+      "outcome": "passed",
+      "duration_s": 0.582,
+      "message": "",
+      "metrics": {
+        "eventos_en_historial": 12
+      }
+    },
+    {
+      "case_id": "RU-A.6",
+      "test": "tests/acceptance/test_rf_by_user.py::test_admin_special_reports_pdf_and_excel",
+      "outcome": "passed",
+      "duration_s": 0.851,
+      "message": "",
+      "metrics": {
+        "tipos_de_reporte": 4,
+        "formatos": 2
+      }
+    },
+    {
+      "case_id": "RU-A.7",
+      "test": "tests/acceptance/test_rf_by_user.py::test_reports_are_foliated_and_tamper_evident",
+      "outcome": "passed",
+      "duration_s": 0.606,
+      "message": "",
+      "metrics": {
+        "reportes_foliados": 3,
+        "alteraciones_detectadas": 2
+      }
+    },
+    {
+      "case_id": "RU-C.1",
+      "test": "tests/acceptance/test_rf_by_user.py::test_reader_dashboard_and_read_only",
+      "outcome": "passed",
+      "duration_s": 0.445,
+      "message": "",
+      "metrics": {
+        "escrituras_bloqueadas": 4
+      }
+    },
+    {
+      "case_id": "RU-C.2",
+      "test": "tests/acceptance/test_rf_by_user.py::test_reader_searches_products_categories_and_stock",
+      "outcome": "passed",
+      "duration_s": 0.445,
+      "message": "",
+      "metrics": {
+        "criterios_de_busqueda": 4
+      }
+    },
+    {
+      "case_id": "RU-E.1",
+      "test": "tests/acceptance/test_rf_by_user.py::test_clerk_login_dashboard_and_read_access",
+      "outcome": "passed",
+      "duration_s": 0.463,
+      "message": "",
+      "metrics": {
+        "vistas_verificadas": 4
+      }
+    },
+    {
+      "case_id": "RU-E.2",
+      "test": "tests/acceptance/test_rf_by_user.py::test_clerk_registers_entries_and_exits_with_stock_check",
+      "outcome": "passed",
+      "duration_s": 0.474,
+      "message": "",
+      "metrics": {
+        "tipos_de_movimiento": 4
+      }
+    },
+    {
+      "case_id": "RU-E.3",
+      "test": "tests/acceptance/test_rf_by_user.py::test_clerk_consults_and_attends_alerts",
+      "outcome": "passed",
+      "duration_s": 0.528,
+      "message": "",
+      "metrics": {
+        "estados": "abierta>atendida>resuelta"
+      }
+    },
+    {
+      "case_id": "RU-E.4",
+      "test": "tests/acceptance/test_rf_by_user.py::test_clerk_generates_general_reports_foliated",
+      "outcome": "passed",
+      "duration_s": 0.492,
+      "message": "",
+      "metrics": {
+        "reportes": 4
       }
     }
   ]

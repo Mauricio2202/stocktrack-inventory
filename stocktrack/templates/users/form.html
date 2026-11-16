@@ -6,16 +6,11 @@
 {% block content %}
 <form class="card form narrow" method="post" novalidate>
   {{ csrf() }}
-  {% if editing %}
-    <p><span class="label">Usuario</span><br><strong class="mono">{{ user.username }}</strong></p>
-  {% else %}
-    {{ field('username', 'Usuario', values, errors, required=True, hint='Minúsculas, números, punto, guion o guion bajo (3-32)', attrs='autocomplete="off" maxlength="32"') }}
-  {% endif %}
   {{ field('full_name', 'Nombre completo', values, errors, required=True, attrs='maxlength="100"') }}
-  {{ field('email', 'Correo electrónico', values, errors, type='email', hint='Necesario para recibir alertas de escasez por correo', attrs='maxlength="120"') }}
+  {{ field('email', 'Correo electrónico', values, errors, type='email', required=True, hint='Es el usuario con el que inicia sesión y donde recibe alertas', attrs='maxlength="120" autocomplete="off"') }}
   <label class="field {{ 'has-error' if errors.get('role') }}"><span class="label">Rol <em>*</em></span>
     <select name="role">
-      {% for r in roles %}<option value="{{ r }}" {{ 'selected' if r == values.get('role') }}>{{ ROLE_LABELS[r] }}</option>{% endfor %}
+      {% for r in roles %}<option value="{{ r }}" {{ 'selected' if r == values.get('role') }}>{{ ROLE_LABELS[r] }} · {{ ROLE_DESCRIPTIONS[r] }}</option>{% endfor %}
     </select>{% if errors.get('role') %}<span class="err">{{ errors.role }}</span>{% endif %}</label>
   <label class="check"><input type="checkbox" name="receive_alerts" value="1" {{ 'checked' if values.get('receive_alerts') }}> Recibir alertas de escasez por correo</label>
   {% if not editing %}

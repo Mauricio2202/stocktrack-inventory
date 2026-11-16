@@ -28,14 +28,15 @@ los defectos urgentes pasan al frente («carril expreso», máximo 1 a la vez); 
 | 3 | Movimientos de inventario atómicos y trazables | PA-03.2, PA-03.3 |
 | 4 | Alertas de escasez: notificación interna y correo SMTP | PA-02.1 … PA-02.5 |
 | 5 | Reportes PDF y Excel (inventario y movimientos) | PA-01.1 … PA-01.5 |
-| 6 | Usuarios y roles; bloqueo por intentos; cambio de clave | RN-01.1, `tests/test_security.py` |
+| 6 | Usuarios y 3 roles (Administrador, Encargado, Consulta); bloqueo por intentos; inactividad | RN-01.1, RU-A/E/C, `tests/test_security.py` |
+| 6b | Reservas de stock con validación del administrador; reportes foliados | RU-A, RU-E, PA-01 |
 | 7 | Límite de 100,000 registros activos | RN-02.1, RN-02.2 |
 | 8 | Concurrencia de 10 usuarios | PA-03.1 |
 | 9 | Bitácora de auditoría | `models/audit.py` |
-| 10 | Diseño del logo | `stocktrack/static/img/` |
+| 10 | Logo StockTrack (proporcionado por el cliente) | `stocktrack/static/img/` |
 | 11 | Pruebas de aceptación: Excel y gráfica pptx | `docs/acceptance/` |
 
-**En «Aceptación del cliente»:** los 16 casos de `docs/acceptance/StockTrack_Pruebas_de_Aceptacion.xlsx` (columna J).
+**En «Aceptación del cliente»:** los 35 casos de `docs/acceptance/StockTrack_Pruebas_de_Aceptacion.xlsx` (columna J).
 
 **Backlog (no incluido en esta fase)**
 

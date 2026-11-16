@@ -4,25 +4,29 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}StockTrack{% endblock %} · StockTrack</title>
-  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/icon.svg') }}">
+  <meta name="csrf-token" content="{{ csrf_token() if g.user else '' }}">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/favicon.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
-<body>
+<body{% if g.user and idle_seconds %} data-idle-seconds="{{ idle_seconds }}" data-ping-url="{{ url_for('idle_ping') }}" data-login-url="{{ url_for('auth.login') }}"{% endif %}>
 {% from "_macros.html" import flashes %}
 {% if g.user %}
 <div class="shell">
   <aside class="sidebar" id="sidebar">
     <a class="brand" href="{{ url_for('dashboard.index') }}" aria-label="StockTrack, inicio">
-      <img src="{{ url_for('static', filename='img/logo-white.svg') }}" alt="StockTrack · Control total de inventarios" width="190" height="47">
+      <img src="{{ url_for('static', filename='img/logo.png') }}" alt="StockTrack · Control total de inventarios" width="190" height="53">
     </a>
     <nav aria-label="Principal">
       {% set ep = request.endpoint or '' %}
       <a href="{{ url_for('dashboard.index') }}" class="{{ 'active' if ep.startswith('dashboard') }}">Panel</a>
       <a href="{{ url_for('products.index') }}" class="{{ 'active' if ep.startswith('products') }}">Productos</a>
-      <a href="{{ url_for('movements.index') }}" class="{{ 'active' if ep.startswith('movements') }}">Movimientos</a>
-      <a href="{{ url_for('alerts.index') }}" class="{{ 'active' if ep.startswith('alerts') }}">Alertas
-        {% if open_alerts %}<span class="pill pill-warn" aria-label="{{ open_alerts }} alertas vigentes">{{ open_alerts }}</span>{% endif %}</a>
-      <a href="{{ url_for('reports.index') }}" class="{{ 'active' if ep.startswith('reports') }}">Reportes</a>
+      <a href="{{ url_for('categories.index') }}" class="{{ 'active' if ep.startswith('categories') }}">Categorías</a>
+      {% if can('movements.view') %}<a href="{{ url_for('movements.index') }}" class="{{ 'active' if ep == 'movements.index' or ep == 'movements.create' }}">Movimientos</a>{% endif %}
+      {% if can('reservations.validate') %}<a href="{{ url_for('movements.reservations') }}" class="{{ 'active' if ep == 'movements.reservations' }}">Reservas por validar
+        {% if pending_reservations %}<span class="pill pill-warn" aria-label="{{ pending_reservations }} reservas pendientes">{{ pending_reservations }}</span>{% endif %}</a>{% endif %}
+      {% if can('alerts.view') %}<a href="{{ url_for('alerts.index') }}" class="{{ 'active' if ep.startswith('alerts') }}">Alertas
+        {% if open_alerts %}<span class="pill pill-warn" aria-label="{{ open_alerts }} alertas vigentes">{{ open_alerts }}</span>{% endif %}</a>{% endif %}
+      {% if can('reports.view') %}<a href="{{ url_for('reports.index') }}" class="{{ 'active' if ep.startswith('reports') }}">Reportes</a>{% endif %}
       {% if can('audit.view') %}<a href="{{ url_for('audit.index') }}" class="{{ 'active' if ep.startswith('audit') }}">Auditoría</a>{% endif %}
       {% if can('users.manage') %}<a href="{{ url_for('users.index') }}" class="{{ 'active' if ep.startswith('users') }}">Usuarios</a>{% endif %}
     </nav>
@@ -45,8 +49,8 @@
       <h1>{% block heading %}{% endblock %}</h1>
       <div class="topbar-actions">
         {% block actions %}{% endblock %}
-        <a class="bell" href="{{ url_for('alerts.index') }}" title="Notificaciones sin leer">🔔
-          {% if unread_notifications %}<span class="pill pill-bad">{{ unread_notifications }}</span>{% endif %}</a>
+        {% if can('alerts.view') %}<a class="bell" href="{{ url_for('alerts.index') }}" title="Notificaciones sin leer">🔔
+          {% if unread_notifications %}<span class="pill pill-bad">{{ unread_notifications }}</span>{% endif %}</a>{% endif %}
       </div>
     </header>
     {{ flashes() }}

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf %}
+{% block title %}Reservas por validar{% endblock %}
+{% block heading %}Reservas de stock (segundo nivel) por validar{% endblock %}
+{% block content %}
+<p class="muted">El encargado solicita la reserva y las unidades quedan retenidas. Al <strong>validar</strong>, salen del inventario; al <strong>rechazar</strong>, se liberan.</p>
+<section class="card flush">
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>N.º</th><th>Solicitada</th><th>Producto</th><th class="num">Cantidad</th><th>Referencia</th><th>Encargado</th><th>Decisión</th></tr></thead>
+    <tbody>
+    {% for m in rows %}
+      <tr><td class="mono">#{{ m.id }}</td><td>{{ m.created_at|local_dt }}</td>
+          <td><a href="{{ url_for('products.detail', product_id=m.product_id) }}">{{ m.product_name }}</a><small class="muted block">{{ m.sku }}</small></td>
+          <td class="num"><strong>{{ m.quantity|num }}</strong></td><td>{{ m.reference or '—' }}{% if m.notes %}<small class="muted block">{{ m.notes }}</small>{% endif %}</td>
+          <td>{{ m.user_name }}</td>
+          <td class="actions">
+            <form method="post" action="{{ url_for('movements.validate', movement_id=m.id) }}" class="inline-form">{{ csrf() }}
+              <input name="note" maxlength="300" placeholder="Nota (obligatoria al rechazar)" aria-label="Nota de validación">
+              <button class="btn btn-sm btn-primary" type="submit" name="decision" value="approve">Validar</button>
+              <button class="btn btn-sm btn-danger" type="submit" name="decision" value="reject">Rechazar</button>
+            </form></td></tr>
+    {% else %}<tr><td colspan="7" class="empty">✔ No hay reservas pendientes de validación.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

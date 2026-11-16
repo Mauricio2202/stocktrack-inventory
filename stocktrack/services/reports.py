@@ -15,6 +15,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
+from reportlab.lib.pdfencrypt import StandardEncryption
 from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.platypus import LongTable, Paragraph, SimpleDocTemplate, Spacer, TableStyle
 
@@ -26,10 +27,13 @@ from ..timeutil import fmt_local, now_local
 STATIC_IMG = Path(__file__).resolve().parent.parent / "static" / "img"
 NAVY, TEAL = "#0f2742", "#0e9aa7"
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-KIND_ES = {"entrada": "Entrada", "salida": "Salida", "ajuste": "Ajuste"}
+KIND_ES = stock_model.KIND_LABELS
+STATUS_ES = stock_model.STATUS_LABELS
+PROTECT_PASSWORD = "stocktrack-report-lock"  # solo disuade ediciones casuales; la garantía real es el SHA-256
 
 
 def stock_status(stock: int, min_stock: int) -> str:
+    """`stock` debe ser el stock disponible (físico - reservado)."""
     if stock == 0:
         return "AGOTADO"
     return "ESCASEZ" if alerts_model.is_low(stock, min_stock) else "OK"
@@ -46,12 +50,13 @@ def _stamp(config: dict) -> str:
 # =============================================================================
 # Excel
 # =============================================================================
-def _new_workbook(title: str):
+def _new_workbook(title: str, folio: str = ""):
     handle = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
     handle.close()
     wb = xlsxwriter.Workbook(handle.name, {"constant_memory": True})
     wb.set_properties({"title": title, "author": "StockTrack", "company": "StockTrack",
-                       "comments": "Generado por StockTrack - Control total de inventarios"})
+                       "comments": f"Generado por StockTrack - Folio {folio}" if folio else "Generado por StockTrack",
+                       "keywords": folio})
     return wb, handle.name
 
 
@@ -85,25 +90,25 @@ def _formats(wb) -> dict:
 
 
 def inventory_xlsx(conn, config: dict, *, category: str = "", low_only: bool = False,
-                   generated_by: str = "") -> bytes:
-    wb, path = _new_workbook("Reporte de inventario - StockTrack")
+                   generated_by: str = "", folio: str = "", category_label: str = "", title: str = "") -> bytes:
+    wb, path = _new_workbook("Reporte de inventario - StockTrack", folio)
     ws = wb.add_worksheet("Inventario")
     fm = _formats(wb)
-    headers = ["SKU", "Producto", "Categoría", "Marca", "Ubicación", "Stock", "Mínimo", "Estado",
-               "Costo unitario", "Precio unitario", "Valor a costo", "Valor a precio"]
-    widths = [14, 44, 18, 16, 14, 9, 9, 11, 14, 14, 16, 16]
-    kinds = [fm["text"], fm["text"], fm["text"], fm["text"], fm["text"], fm["int"], fm["int"],
+    headers = ["SKU", "Producto", "Categoría", "Marca", "Ubicación", "Stock", "Reservado", "Disponible", "Mínimo",
+               "Estado", "Costo unitario", "Precio unitario", "Valor a costo", "Valor a precio"]
+    widths = [14, 44, 18, 16, 14, 9, 10, 11, 9, 11, 14, 14, 16, 16]
+    kinds = [fm["text"], fm["text"], fm["text"], fm["text"], fm["text"], fm["int"], fm["int"], fm["int"], fm["int"],
              fm["center"], fm["money"], fm["money"], fm["money"], fm["money"]]
     for col, (w, fmt) in enumerate(zip(widths, kinds)):
         ws.set_column(col, col, w, fmt)
 
     scope = []
     if category:
-        scope.append(f"Categoría: {category}")
+        scope.append(f"Categoría: {category_label or category}")
     if low_only:
         scope.append("Solo productos en escasez")
     ws.write(0, 0, "StockTrack · Reporte de inventario", fm["title"])
-    ws.write(1, 0, f"{config.get('COMPANY_NAME', '')} · Generado el {_stamp(config)}"
+    ws.write(1, 0, f"Folio {folio} · {config.get('COMPANY_NAME', '')} · Generado el {_stamp(config)}"
                    f"{' por ' + generated_by if generated_by else ''}"
                    f" · {'; '.join(scope) if scope else 'Todos los productos activos'}", fm["meta"])
     header_row, first = 3, 4
@@ -121,12 +126,14 @@ def inventory_xlsx(conn, config: dict, *, category: str = "", low_only: bool = F
         ws.write_string(row, 3, p["brand"] or "")
         ws.write_string(row, 4, p["location"] or "")
         ws.write_number(row, 5, p["stock"])
-        ws.write_number(row, 6, p["min_stock"])
-        ws.write_string(row, 7, stock_status(p["stock"], p["min_stock"]))
-        ws.write_number(row, 8, p["cost_cents"] / 100)
-        ws.write_number(row, 9, p["price_cents"] / 100)
-        ws.write_formula(row, 10, f"=F{excel_row}*I{excel_row}", None, p["stock"] * p["cost_cents"] / 100)
-        ws.write_formula(row, 11, f"=F{excel_row}*J{excel_row}", None, p["stock"] * p["price_cents"] / 100)
+        ws.write_number(row, 6, p["reserved"])
+        ws.write_formula(row, 7, f"=F{excel_row}-G{excel_row}", None, p["available"])
+        ws.write_number(row, 8, p["min_stock"])
+        ws.write_string(row, 9, stock_status(p["available"], p["min_stock"]))
+        ws.write_number(row, 10, p["cost_cents"] / 100)
+        ws.write_number(row, 11, p["price_cents"] / 100)
+        ws.write_formula(row, 12, f"=F{excel_row}*K{excel_row}", None, p["stock"] * p["cost_cents"] / 100)
+        ws.write_formula(row, 13, f"=F{excel_row}*L{excel_row}", None, p["stock"] * p["price_cents"] / 100)
         total_units += p["stock"]
         total_cost += p["stock"] * p["cost_cents"]
         total_price += p["stock"] * p["price_cents"]
@@ -136,20 +143,22 @@ def inventory_xlsx(conn, config: dict, *, category: str = "", low_only: bool = F
     if row > first:
         ws.autofilter(header_row, 0, row - 1, len(headers) - 1)
     ws.write(row, 0, "TOTAL", fm["total_label"])
-    for col in range(1, 12):
+    for col in range(1, 14):
         ws.write_blank(row, col, None, fm["total_label"])
     rng = lambda c: f"{c}{first + 1}:{c}{last_data}"  # noqa: E731
     if last_data > first:
         ws.write_formula(row, 5, f"=SUM({rng('F')})", fm["total_int"], total_units)
-        ws.write_formula(row, 10, f"=SUM({rng('K')})", fm["total_money"], total_cost / 100)
-        ws.write_formula(row, 11, f"=SUM({rng('L')})", fm["total_money"], total_price / 100)
-        ws.conditional_format(first, 7, last_data - 1, 7, {
+        ws.write_formula(row, 12, f"=SUM({rng('M')})", fm["total_money"], total_cost / 100)
+        ws.write_formula(row, 13, f"=SUM({rng('N')})", fm["total_money"], total_price / 100)
+        ws.conditional_format(first, 9, last_data - 1, 9, {
             "type": "cell", "criteria": "==", "value": '"AGOTADO"', "format": fm["bad"]})
-        ws.conditional_format(first, 7, last_data - 1, 7, {
+        ws.conditional_format(first, 9, last_data - 1, 9, {
             "type": "cell", "criteria": "==", "value": '"ESCASEZ"', "format": fm["warn"]})
-        ws.conditional_format(first, 7, last_data - 1, 7, {
+        ws.conditional_format(first, 9, last_data - 1, 9, {
             "type": "cell", "criteria": "==", "value": '"OK"', "format": fm["good"]})
     ws.freeze_panes(first, 2)
+    ws.protect(PROTECT_PASSWORD, {"autofilter": True, "sort": False})
+    ws.set_footer(f"&LFolio {folio}&RPágina &P de &N")
     ws.set_landscape()
     ws.set_paper(9)
     ws.fit_to_pages(1, 0)
@@ -157,20 +166,21 @@ def inventory_xlsx(conn, config: dict, *, category: str = "", low_only: bool = F
     return _finish(wb, path)
 
 
-def movements_xlsx(conn, config: dict, *, product_id=None, kind=None, start_utc=None, end_utc=None,
-                   range_label: str = "", generated_by: str = "") -> bytes:
-    wb, path = _new_workbook("Reporte de movimientos - StockTrack")
+def movements_xlsx(conn, config: dict, *, product_id=None, kind=None, status=None, start_utc=None, end_utc=None,
+                   range_label: str = "", generated_by: str = "", folio: str = "",
+                   title: str = "Reporte de movimientos de inventario") -> bytes:
+    wb, path = _new_workbook(title, folio)
     ws = wb.add_worksheet("Movimientos")
     fm = _formats(wb)
-    headers = ["Folio", "Fecha y hora", "SKU", "Producto", "Tipo", "Cantidad", "Variación",
-               "Stock antes", "Stock después", "Referencia", "Usuario", "Notas"]
-    widths = [9, 17, 14, 40, 11, 10, 10, 11, 13, 16, 22, 36]
-    kinds = [fm["int"], fm["text"], fm["text"], fm["text"], fm["center"], fm["int"], fm["int"],
-             fm["int"], fm["int"], fm["text"], fm["text"], fm["text"]]
+    headers = ["N.º mov.", "Fecha y hora", "SKU", "Producto", "Tipo", "Estado", "Cantidad", "Variación",
+               "Stock antes", "Stock después", "Referencia", "Usuario", "Validó", "Notas"]
+    widths = [9, 17, 14, 40, 28, 18, 10, 10, 11, 13, 16, 22, 22, 36]
+    kinds = [fm["int"], fm["text"], fm["text"], fm["text"], fm["text"], fm["text"], fm["int"], fm["int"],
+             fm["int"], fm["int"], fm["text"], fm["text"], fm["text"], fm["text"]]
     for col, (w, fmt) in enumerate(zip(widths, kinds)):
         ws.set_column(col, col, w, fmt)
-    ws.write(0, 0, "StockTrack · Reporte de movimientos de inventario", fm["title"])
-    ws.write(1, 0, f"{config.get('COMPANY_NAME', '')} · Generado el {_stamp(config)}"
+    ws.write(0, 0, f"StockTrack · {title}", fm["title"])
+    ws.write(1, 0, f"Folio {folio} · {config.get('COMPANY_NAME', '')} · Generado el {_stamp(config)}"
                    f"{' por ' + generated_by if generated_by else ''} · {range_label or 'Todo el historial'}",
              fm["meta"])
     header_row, first = 3, 4
@@ -178,24 +188,34 @@ def movements_xlsx(conn, config: dict, *, product_id=None, kind=None, start_utc=
     for col, name in enumerate(headers):
         ws.write(header_row, col, name, fm["head"])
     row = first
-    for m in stock_model.iter_movements(conn, product_id=product_id, kind=kind,
+    net = 0
+    for m in stock_model.iter_movements(conn, product_id=product_id, kind=kind, status=status,
                                         start_utc=start_utc, end_utc=end_utc):
         ws.write_number(row, 0, m["id"])
         ws.write_string(row, 1, fmt_local(m["created_at"], config["TIMEZONE"], "%d/%m/%Y %H:%M"))
         ws.write_string(row, 2, m["sku"])
         ws.write_string(row, 3, m["product_name"])
         ws.write_string(row, 4, KIND_ES[m["kind"]])
-        ws.write_number(row, 5, m["quantity"])
-        ws.write_number(row, 6, m["delta"])
-        ws.write_number(row, 7, m["stock_before"])
-        ws.write_number(row, 8, m["stock_after"])
-        ws.write_string(row, 9, m["reference"] or "")
-        ws.write_string(row, 10, m["user_name"])
-        ws.write_string(row, 11, m["notes"] or "")
+        ws.write_string(row, 5, STATUS_ES[m["status"]])
+        ws.write_number(row, 6, m["quantity"])
+        ws.write_number(row, 7, m["delta"])
+        ws.write_number(row, 8, m["stock_before"])
+        ws.write_number(row, 9, m["stock_after"])
+        ws.write_string(row, 10, m["reference"] or "")
+        ws.write_string(row, 11, m["user_name"])
+        ws.write_string(row, 12, m["validated_by_name"] or "")
+        ws.write_string(row, 13, m["validation_note"] or m["notes"] or "")
+        net += m["delta"]
         row += 1
     if row > first:
         ws.autofilter(header_row, 0, row - 1, len(headers) - 1)
+        ws.write(row, 0, "TOTAL", fm["total_label"])
+        for col in range(1, len(headers)):
+            ws.write_blank(row, col, None, fm["total_label"])
+        ws.write_formula(row, 7, f"=SUM(H{first + 1}:H{row})", fm["total_int"], net)
     ws.freeze_panes(first, 0)
+    ws.protect(PROTECT_PASSWORD, {"autofilter": True, "sort": False})
+    ws.set_footer(f"&LFolio {folio}&RPágina &P de &N")
     ws.set_landscape()
     ws.set_paper(9)
     ws.fit_to_pages(1, 0)
@@ -216,7 +236,7 @@ def _clip(text, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def _canvas_class(title: str, config: dict, generated_by: str):
+def _canvas_class(title: str, config: dict, generated_by: str, folio: str = ""):
     logo = str(STATIC_IMG / "logo.png")
 
     class PageNumberedCanvas(rl_canvas.Canvas):
@@ -239,7 +259,7 @@ def _canvas_class(title: str, config: dict, generated_by: str):
         def _decorate(self, total: int):
             width, height = self._pagesize
             self.saveState()
-            self.drawImage(logo, 1.5 * cm, height - 1.55 * cm, width=3.9 * cm, height=0.98 * cm,
+            self.drawImage(logo, 1.5 * cm, height - 1.55 * cm, width=3.6 * cm, height=1.0 * cm,
                            preserveAspectRatio=True, mask="auto")
             self.setFont("Helvetica-Bold", 11)
             self.setFillColor(colors.HexColor(NAVY))
@@ -254,7 +274,7 @@ def _canvas_class(title: str, config: dict, generated_by: str):
             self.setLineWidth(0.5)
             self.line(1.5 * cm, 1.25 * cm, width - 1.5 * cm, 1.25 * cm)
             self.setFont("Helvetica", 7.5)
-            left = f"StockTrack · Control total de inventarios · Generado el {_stamp(config)}"
+            left = f"Folio {folio} · StockTrack · Generado el {_stamp(config)}"
             if generated_by:
                 left += f" por {_safe(generated_by)}"
             self.drawString(1.5 * cm, 0.8 * cm, left)
@@ -312,22 +332,25 @@ def _main_table(header: list[str], rows: list[list], widths: list[float], numeri
     return table
 
 
-def _build_pdf(title: str, config: dict, generated_by: str, story: list) -> bytes:
+def _build_pdf(title: str, config: dict, generated_by: str, story: list, folio: str = "") -> bytes:
     buffer = BytesIO()
+    # Permisos bloqueados: se puede leer e imprimir, no editar ni copiar páginas (apoya el "incorruptible").
+    encrypt = StandardEncryption("", ownerPassword=PROTECT_PASSWORD + folio, canPrint=1, canModify=0,
+                                 canCopy=0, canAnnotate=0, strength=128)
     doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=1.5 * cm, rightMargin=1.5 * cm,
                             topMargin=2.2 * cm, bottomMargin=1.6 * cm, title=title, author="StockTrack",
-                            subject="Reporte generado por StockTrack")
-    doc.build(story, canvasmaker=_canvas_class(title, config, generated_by))
+                            subject=f"Folio {folio}", keywords=folio, encrypt=encrypt)
+    doc.build(story, canvasmaker=_canvas_class(title, config, generated_by, folio))
     return buffer.getvalue()
 
 
 def inventory_pdf(conn, config: dict, *, category: str = "", low_only: bool = False,
-                  generated_by: str = "") -> bytes:
+                  generated_by: str = "", folio: str = "", category_label: str = "", title: str = "") -> bytes:
     styles = _styles()
     rows, row_colors = [], {}
     units = cost = price = low = 0
     for index, p in enumerate(products_model.iter_for_report(conn, category=category, low_only=low_only), 1):
-        status = stock_status(p["stock"], p["min_stock"])
+        status = stock_status(p["available"], p["min_stock"])
         if status != "OK":
             low += 1
             row_colors[index] = "#fde2e0" if status == "AGOTADO" else "#fff0d6"
@@ -335,11 +358,11 @@ def inventory_pdf(conn, config: dict, *, category: str = "", low_only: bool = Fa
         cost += p["stock"] * p["cost_cents"]
         price += p["stock"] * p["price_cents"]
         rows.append([_clip(p["sku"], 20), _clip(p["name"], 52), _clip(p["category"], 22), _clip(p["location"], 16),
-                     f"{p['stock']:,}", f"{p['min_stock']:,}", status, money(p["cost_cents"]),
+                     f"{p['stock']:,}", f"{p['available']:,}", f"{p['min_stock']:,}", status, money(p["cost_cents"]),
                      money(p["price_cents"]), money(p["stock"] * p["cost_cents"])])
     scope = []
     if category:
-        scope.append(f"Categoría: {category}")
+        scope.append(f"Categoría: {category_label or category}")
     if low_only:
         scope.append("solo productos en escasez")
     page_width = landscape(A4)[0] - 3 * cm
@@ -353,33 +376,35 @@ def inventory_pdf(conn, config: dict, *, category: str = "", low_only: bool = Fa
         Spacer(1, 10),
     ]
     if rows:
-        widths = [2.8, 6.4, 3.2, 2.5, 1.5, 1.5, 1.9, 2.2, 2.2, 2.5]
+        widths = [2.8, 6.0, 3.0, 2.3, 1.4, 1.6, 1.4, 1.9, 2.1, 2.1, 2.4]
         widths = [w * cm for w in widths]
         scale = page_width / sum(widths)
         story.append(_main_table(
-            ["SKU", "Producto", "Categoría", "Ubicación", "Stock", "Mín.", "Estado", "Costo", "Precio", "Valor a costo"],
-            rows, [w * scale for w in widths], {4, 5, 7, 8, 9}, row_colors))
+            ["SKU", "Producto", "Categoría", "Ubicación", "Stock", "Disp.", "Mín.", "Estado", "Costo", "Precio",
+             "Valor a costo"],
+            rows, [w * scale for w in widths], {4, 5, 6, 8, 9, 10}, row_colors))
     else:
         story.append(Paragraph("No hay productos que coincidan con los filtros.", styles["meta"]))
-    return _build_pdf("Reporte de inventario", config, generated_by, story)
+    return _build_pdf("Reporte de inventario", config, generated_by, story, folio)
 
 
-def movements_pdf(conn, config: dict, *, product_id=None, kind=None, start_utc=None, end_utc=None,
-                  range_label: str = "", generated_by: str = "") -> bytes:
+def movements_pdf(conn, config: dict, *, product_id=None, kind=None, status=None, start_utc=None, end_utc=None,
+                  range_label: str = "", generated_by: str = "", folio: str = "",
+                  title: str = "Reporte de movimientos de inventario") -> bytes:
     styles = _styles()
     rows = []
     inflow = outflow = 0
-    for m in stock_model.iter_movements(conn, product_id=product_id, kind=kind,
+    for m in stock_model.iter_movements(conn, product_id=product_id, kind=kind, status=status,
                                         start_utc=start_utc, end_utc=end_utc):
         inflow += max(m["delta"], 0)
         outflow += max(-m["delta"], 0)
         rows.append([str(m["id"]), fmt_local(m["created_at"], config["TIMEZONE"]), _clip(m["sku"], 18),
-                     _clip(m["product_name"], 40), KIND_ES[m["kind"]], f"{m['quantity']:,}", f"{m['delta']:+,}",
-                     f"{m['stock_after']:,}", _clip(m["reference"], 16), _clip(m["user_name"], 22)])
+                     _clip(m["product_name"], 34), _clip(KIND_ES[m["kind"]], 30), _clip(STATUS_ES[m["status"]], 22),
+                     f"{m['quantity']:,}", f"{m['delta']:+,}", _clip(m["reference"], 14), _clip(m["user_name"], 20)])
     page_width = landscape(A4)[0] - 3 * cm
     story = [
-        Paragraph("Reporte de movimientos de inventario", styles["h1"]),
-        Paragraph(_safe(range_label or "Todo el historial"), styles["meta"]),
+        Paragraph(_safe(title), styles["h1"]),
+        Paragraph(_safe(f"Folio {folio} · {range_label or 'Todo el historial'}"), styles["meta"]),
         Spacer(1, 8),
         _kpi_table([("Movimientos", f"{len(rows):,}"), ("Unidades que entraron", f"{inflow:,}"),
                     ("Unidades que salieron", f"{outflow:,}"), ("Variación neta", f"{inflow - outflow:+,}")],
@@ -387,12 +412,12 @@ def movements_pdf(conn, config: dict, *, product_id=None, kind=None, start_utc=N
         Spacer(1, 10),
     ]
     if rows:
-        widths = [1.4, 3.1, 2.8, 6.6, 1.9, 1.7, 1.7, 1.9, 2.6, 3.4]
+        widths = [1.3, 2.9, 2.5, 5.2, 3.6, 2.8, 1.4, 1.4, 2.3, 3.0]
         widths = [w * cm for w in widths]
         scale = page_width / sum(widths)
         story.append(_main_table(
-            ["Folio", "Fecha y hora", "SKU", "Producto", "Tipo", "Cant.", "Var.", "Stock", "Referencia", "Usuario"],
-            rows, [w * scale for w in widths], {0, 5, 6, 7}))
+            ["N.º", "Fecha y hora", "SKU", "Producto", "Tipo", "Estado", "Cant.", "Var.", "Referencia", "Usuario"],
+            rows, [w * scale for w in widths], {0, 6, 7}))
     else:
         story.append(Paragraph("No hay movimientos en el periodo seleccionado.", styles["meta"]))
-    return _build_pdf("Reporte de movimientos", config, generated_by, story)
+    return _build_pdf(title, config, generated_by, story, folio)

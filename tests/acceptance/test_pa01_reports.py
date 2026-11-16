@@ -23,9 +23,9 @@ def seeded(app, make_product, move, conn):
     for sku, category, qty, minimum, cost, price in CATALOG:
         ids[sku] = make_product(sku, name=f"Producto {sku}", category=category, stock_qty=qty,
                                 min_stock=minimum, cost=cost, price=price)
-    move(ids["TEL-001"], "salida", 3, reference="VTA-1")
-    move(ids["LAP-002"], "entrada", 4, reference="OC-7")
-    move(ids["ACC-003"], "ajuste", 20, notes="Conteo físico")
+    move(ids["TEL-001"], "venta", 3, reference="VTA-1")
+    move(ids["LAP-002"], "compra", 4, reference="OC-7")
+    move(ids["ACC-003"], "devolucion", 2, reference="DEV-9")
     return ids
 
 
@@ -44,7 +44,7 @@ def _download(client, url):
 @pytest.fixture
 def reader_client(app, seeded):
     client = app.test_client()
-    assert login(client, "consulta").status_code == 302  # el rol de solo lectura también descarga reportes
+    assert login(client, "encargado").status_code == 302  # el encargado genera los reportes generales
     return client
 
 
@@ -73,19 +73,19 @@ def test_inventory_xlsx(reader_client, conn, metrics):
     assert response.mimetype.endswith("spreadsheetml.sheet")
     formulas = openpyxl.load_workbook(io.BytesIO(response.data))["Inventario"]
     values = openpyxl.load_workbook(io.BytesIO(response.data), data_only=True)["Inventario"]
-    assert [c.value for c in formulas[4]][:8] == ["SKU", "Producto", "Categoría", "Marca", "Ubicación", "Stock", "Mínimo", "Estado"]
+    assert [c.value for c in formulas[4]][:8] == ["SKU", "Producto", "Categoría", "Marca", "Ubicación", "Stock", "Reservado", "Disponible"]
     data_rows = [r for r in range(5, formulas.max_row + 1) if formulas.cell(r, 1).value not in (None, "TOTAL")]
     assert len(data_rows) == len(CATALOG)
     first = data_rows[0]
-    assert formulas.cell(first, 11).value == f"=F{first}*I{first}"                 # fórmula, no valor fijo
+    assert formulas.cell(first, 13).value == f"=F{first}*K{first}"                 # fórmula, no valor fijo
     total_row = data_rows[-1] + 1
     assert formulas.cell(total_row, 1).value == "TOTAL"
     assert str(formulas.cell(total_row, 6).value).startswith("=SUM(")
     totals = _expected_totals(conn)
     assert values.cell(total_row, 6).value == totals["u"]
-    assert round(values.cell(total_row, 11).value, 2) == round(totals["c"] / 100, 2)
-    assert round(values.cell(total_row, 12).value, 2) == round(totals["p"] / 100, 2)
-    status = {values.cell(r, 1).value: values.cell(r, 8).value for r in data_rows}
+    assert round(values.cell(total_row, 13).value, 2) == round(totals["c"] / 100, 2)
+    assert round(values.cell(total_row, 14).value, 2) == round(totals["p"] / 100, 2)
+    status = {values.cell(r, 1).value: values.cell(r, 10).value for r in data_rows}
     assert status["ESC-001"] == "ESCASEZ" and status["TEL-001"] == "OK"
     assert formulas.auto_filter.ref and formulas.freeze_panes == "C5"
     metrics.update({"xlsx_filas": len(data_rows), "xlsx_bytes": len(response.data)})
@@ -102,7 +102,7 @@ def test_movements_pdf(reader_client, conn, metrics):
     assert f"{total:,}" in text                          # KPI «Movimientos»
     for reference in ("VTA-1", "OC-7"):
         assert reference in text
-    assert "Entrada" in text and "Salida" in text and "Ajuste" in text
+    assert "Entrada por Compra" in text and "Salida por Venta" in text and "Salida por Devoluci" in text
     metrics.update({"movimientos": total})
 
 
@@ -111,12 +111,12 @@ def test_movements_xlsx_and_filters(reader_client, conn, metrics):
     today = _today(reader_client)
     response = _download(reader_client, f"/reportes/movimientos.xlsx?desde={today}&hasta={today}")
     sheet = openpyxl.load_workbook(io.BytesIO(response.data), data_only=True)["Movimientos"]
-    rows = [r for r in range(5, sheet.max_row + 1) if sheet.cell(r, 1).value]
+    rows = [r for r in range(5, sheet.max_row + 1) if sheet.cell(r, 1).value not in (None, "TOTAL")]
     assert len(rows) == conn.scalar("SELECT COUNT(*) FROM stock_movements")
-    only_out = _download(reader_client, f"/reportes/movimientos.xlsx?tipo=salida&desde={today}&hasta={today}")
+    only_out = _download(reader_client, f"/reportes/movimientos.xlsx?tipo=venta&desde={today}&hasta={today}")
     sheet = openpyxl.load_workbook(io.BytesIO(only_out.data), data_only=True)["Movimientos"]
-    kinds = {sheet.cell(r, 5).value for r in range(5, sheet.max_row + 1) if sheet.cell(r, 1).value}
-    assert kinds == {"Salida"}
+    kinds = {sheet.cell(r, 5).value for r in range(5, sheet.max_row + 1) if sheet.cell(r, 1).value not in (None, "TOTAL")}
+    assert kinds == {"Salida por Venta"}
     future = _download(reader_client, "/reportes/movimientos.xlsx?desde=2099-01-01&hasta=2099-01-31")
     sheet = openpyxl.load_workbook(io.BytesIO(future.data), data_only=True)["Movimientos"]
     assert not [r for r in range(5, sheet.max_row + 1) if sheet.cell(r, 1).value]   # periodo vacío -> hoja sin datos
@@ -126,8 +126,8 @@ def test_movements_xlsx_and_filters(reader_client, conn, metrics):
 
 
 @pytest.mark.acceptance("PA-01.5")
-def test_filters_match_between_formats(app, reader_client, metrics):
-    for query, expected_skus in (("categoria=Laptops", {s for s, c, *_ in CATALOG if c == "Laptops"}),
+def test_filters_match_between_formats(app, reader_client, conn, metrics):
+    for query, expected_skus in ((f"categoria={_cat_id(conn, 'Laptops')}", {s for s, c, *_ in CATALOG if c == "Laptops"}),
                                  ("escasez=1", {"ESC-001"})):
         xlsx = _download(reader_client, f"/reportes/inventario.xlsx?{query}")
         sheet = openpyxl.load_workbook(io.BytesIO(xlsx.data), data_only=True)["Inventario"]
@@ -143,6 +143,10 @@ def test_filters_match_between_formats(app, reader_client, metrics):
     assert reader_client.get("/reportes/inventario.xlsx").status_code == 200
     assert reader_client.get("/reportes/inventario.csv").status_code == 404          # formato no soportado
     metrics.update({"filtros_verificados": 2})
+
+
+def _cat_id(conn, name):
+    return conn.scalar("SELECT id FROM categories WHERE name = ?", (name,))
 
 
 def _today(client):

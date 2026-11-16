@@ -12,7 +12,7 @@
 <section class="card flush">
   <div class="table-wrap">
   <table class="table">
-    <thead><tr><th>Detectada</th><th>Producto</th><th class="num">Stock actual</th><th class="num">Mínimo</th><th>Estado</th><th>Correo</th><th></th></tr></thead>
+    <thead><tr><th>Detectada</th><th>Producto</th><th class="num">Disponible</th><th class="num">Mínimo</th><th>Estado</th><th>Correo</th><th></th></tr></thead>
     <tbody>
     {% for a in rows %}
       <tr>
@@ -20,15 +20,15 @@
         <td><a href="{{ url_for('products.detail', product_id=a.product_id) }}">{{ a.name }}</a><small class="muted block">{{ a.sku }}</small></td>
         <td class="num"><strong>{{ a.current_stock|num }}</strong></td><td class="num">{{ a.current_min|num }}</td>
         <td>{% if a.status == 'abierta' %}<span class="badge badge-warn">Abierta</span>
-            {% elif a.status == 'reconocida' %}<span class="badge badge-info">Reconocida</span>{% if a.ack_name %}<small class="muted block">por {{ a.ack_name }}</small>{% endif %}
+            {% elif a.status == 'atendida' %}<span class="badge badge-info">Atendida</span>{% if a.attended_name %}<small class="muted block">por {{ a.attended_name }}</small>{% endif %}
             {% else %}<span class="badge badge-ok">Resuelta</span>{% if a.resolved_at %}<small class="muted block">{{ a.resolved_at|local_dt }}</small>{% endif %}{% endif %}</td>
         <td>{% if a.email_status == 'enviado' %}<span class="badge badge-ok" title="{{ a.email_detail }}">Enviado</span>
             {% elif a.email_status == 'error' %}<span class="badge badge-bad" title="{{ a.email_detail }}">Error</span>
             {% elif a.email_status == 'omitido' %}<span class="badge badge-muted" title="{{ a.email_detail }}">Omitido</span>
             {% else %}<span class="badge badge-muted">Pendiente</span>{% endif %}</td>
         <td class="actions">
-          {% if a.status == 'abierta' and can('alerts.ack') %}
-          <form method="post" action="{{ url_for('alerts.acknowledge', alert_id=a.id) }}">{{ csrf() }}<button class="btn btn-sm" type="submit">Reconocer</button></form>
+          {% if a.status == 'abierta' and can('alerts.attend') %}
+          <form method="post" action="{{ url_for('alerts.attend', alert_id=a.id) }}">{{ csrf() }}<button class="btn btn-sm" type="submit">Marcar atendida</button></form>
           {% endif %}
         </td>
       </tr>

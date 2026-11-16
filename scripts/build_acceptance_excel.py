@@ -17,6 +17,7 @@ from openpyxl.utils import get_column_letter
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from tests.acceptance.catalog import CASES, CRITERIA  # noqa: E402
+from tests.acceptance.requirements import MANUAL, RF, RNF, UNIT  # noqa: E402
 
 RESULTS = ROOT / "docs" / "acceptance" / "results.json"
 OUT = ROOT / "docs" / "acceptance" / "StockTrack_Pruebas_de_Aceptacion.xlsx"
@@ -145,7 +146,7 @@ def main() -> None:
     notes = [
         "Lo que significa «Aprobado»: la prueba automatizada pasó contra el código entregado, en el entorno indicado en la hoja «Alcance».",
         "La aceptación formal es del cliente: se registra en la columna J de la hoja «Casos» y se refleja aquí.",
-        "Criterios PA-01 a PA-03: pruebas de aceptación pedidas por el cliente. RN-01 y RN-02: requerimiento no funcional y restricción del proyecto.",
+        "Criterios PA-01 a PA-03: pruebas de aceptación pedidas por el cliente. RN-01 y RN-02: rol y capacidad. RU-A/RU-E/RU-C y RNF: requerimientos por tipo de usuario (hoja «Cobertura RF-RNF»).",
     ]
     for i, text in enumerate(notes):
         c = summary.cell(total + 2 + i, 1, text)
@@ -170,6 +171,57 @@ def main() -> None:
     met.freeze_panes = "A4"
     met.auto_filter.ref = f"A3:D{r - 1}"
 
+    # ------------------------------------------------------------ Cobertura RF/RNF
+    cov = wb.create_sheet("Cobertura RF-RNF")
+    cov["A1"] = "Cobertura de requerimientos (documento «Requerimientos por usuario – StockTrack»)"
+    cov["A1"].font = font(bold=True, size=14, color=NAVY)
+    cov["A2"] = "El estado se calcula con fórmulas sobre la hoja «Casos»; los requerimientos sin prueba automatizada indican su evidencia."
+    cov["A2"].font = font(size=9, color="5B6B7E")
+    header(cov, 4, ["ID", "Rol / categoría", "Requerimiento", "Casos que lo cubren", "Estado"], [10, 18, 62, 34, 26])
+    covers: dict[str, list[str]] = {}
+    for case in CASES:
+        for rid in [x.strip() for x in case.get("covers", "").split(",") if x.strip()]:
+            covers.setdefault(rid, []).append(case["id"])
+    case_ids = f"Casos!$A${first}:$A${last}"
+    case_res = f"Casos!$G${first}:$G${last}"
+    r = 5
+    for table in (RF, RNF):
+        for rid, (group, name) in table.items():
+            ids = covers.get(rid, [])
+            cov.cell(r, 1, rid), cov.cell(r, 2, group), cov.cell(r, 3, name)
+            if ids:
+                cov.cell(r, 4, ", ".join(ids) + (" · " + MANUAL[rid][0] if rid in MANUAL else ""))
+                checks = ",".join(f'INDEX({case_res},MATCH("{i}",{case_ids},0))="Aprobado"' for i in ids)
+                manual_state = MANUAL[rid][1] if rid in MANUAL else None
+                ok = f'"{manual_state}"' if manual_state else '"Aprobado"'
+                cov.cell(r, 5, f'=IF(AND({checks}),{ok},"Revisar")')
+            elif rid in UNIT:
+                cov.cell(r, 4, UNIT[rid])
+                cov.cell(r, 5, "Aprobado (pruebas unitarias)")
+            elif rid in MANUAL:
+                cov.cell(r, 4, MANUAL[rid][0])
+                cov.cell(r, 5, MANUAL[rid][1])
+            else:
+                cov.cell(r, 4, "—")
+                cov.cell(r, 5, "SIN COBERTURA")
+            for col in range(1, 6):
+                c = cov.cell(r, col)
+                c.font, c.border = font(bold=(col == 1)), BORDER
+                c.alignment = Alignment(vertical="top", wrap_text=True, horizontal="center" if col in (1, 5) else "left")
+            r += 1
+    cov.freeze_panes = "A5"
+    cov.auto_filter.ref = f"A4:E{r - 1}"
+    cov.conditional_formatting.add(f"E5:E{r - 1}", CellIsRule(operator="equal", formula=['"Aprobado"'],
+        fill=PatternFill("solid", bgColor="D5EBDD")))
+    cov.conditional_formatting.add(f"E5:E{r - 1}", CellIsRule(operator="equal", formula=['"SIN COBERTURA"'],
+        fill=PatternFill("solid", bgColor="F8D9D6")))
+    cov.conditional_formatting.add(f"E5:E{r - 1}", CellIsRule(operator="equal", formula=['"No implementado"'],
+        fill=PatternFill("solid", bgColor="F8D9D6")))
+    cov.cell(r + 1, 1, "Total de requerimientos").font = font(bold=True)
+    cov.cell(r + 1, 3, f"=COUNTA(A5:A{r - 1})")
+    cov.cell(r + 2, 1, "Con estado «Aprobado»").font = font(bold=True)
+    cov.cell(r + 2, 3, f'=COUNTIF(E5:E{r - 1},"Aprobado*")')
+
     # --------------------------------------------------------------- Alcance
     scope = wb.create_sheet("Alcance")
     scope.column_dimensions["A"].width = 30
@@ -180,10 +232,11 @@ def main() -> None:
         ("Cómo reproducir", "python -m pytest tests   →   python scripts/build_acceptance_excel.py   →   python scripts/build_status_pptx.py"),
         ("Base de datos probada", "SQLite (modo WAL). El código incluye esquema y soporte para PostgreSQL, pero NO se ejecutó contra PostgreSQL en esta corrida (no había controlador psycopg2 ni red para instalarlo)."),
         ("Correo", "Se probó el envío SMTP real contra un servidor SMTP de prueba en memoria (entrega, contenido, fallas). No se probó contra un proveedor real (Gmail, SES, etc.) ni con TLS."),
-        ("Concurrencia (PA-03)", "10 usuarios con sesión propia contra un servidor HTTP real con hilos, por loopback, en un solo equipo. No equivale a una prueba de carga de producción con red y servidor dedicado."),
+        ("Concurrencia (PA-03)", "10 usuarios (7 encargados y 3 administradores) con sesión propia contra un servidor HTTP real con hilos, por loopback, en un solo equipo. No equivale a una prueba de carga de producción con red y servidor dedicado."),
+        ("Navegadores (RNF-18)", "La prueba responsive se ejecuta en Chromium (3 resoluciones). Edge usa el mismo motor pero no se probó; Firefox no estaba instalado. Pendiente validación manual."),
         ("Mediana vs. un usuario", "Con 10 usuarios la mediana de latencia sube respecto a un solo usuario (ver hoja Metricas); el criterio aplicado fue absoluto: 0 errores, p95 de páginas ≤ 1 s y reporte Excel ≤ 3 s."),
         ("Capacidad (RN-02)", "100,000 productos activos cargados en bloque; páginas medidas ≤ 2 s. El PDF se limita a 5,000 filas (configurable); para más filas se usa Excel."),
-        ("Logo y metodología", "El logo se entrega en SVG/PNG. Kanban (tablero) e ISO 9001 (matriz) están en la carpeta docs/ del proyecto; la certificación ISO 9001 es de la organización, no del software."),
+        ("Logo y metodología", "El logo oficial (PNG, proporcionado por el cliente) está en stocktrack/static/img. Kanban (tablero) e ISO 9001 (matriz) están en la carpeta docs/ del proyecto; la certificación ISO 9001 es de la organización, no del software."),
     ]
     for i, (k, v) in enumerate(rows, 3):
         a, b = scope.cell(i, 1, k), scope.cell(i, 2, v)

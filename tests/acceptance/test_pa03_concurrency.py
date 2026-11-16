@@ -15,34 +15,45 @@ from tests.helpers.live import User, live, run_parallel, summarize
 N_USERS = 10
 ROUNDS = 15
 PAGE_LABELS = {"panel", "buscar", "detalle", "alertas", "movimientos"}
-ROLE_CYCLE = ["admin", "gerente", "almacenista"]
+WRITER_ROLE, READER_ROLE = "encargado", "admin"   # solo el encargado registra movimientos; el admin consulta y reporta
 INITIAL_STOCK = 200
 
 
 @pytest.fixture
 def team(app, conn):
-    """Diez usuarios reales con sesión propia (admin, gerente y almacenista)."""
+    """Diez usuarios reales con sesión propia: 7 encargados (escriben) y 3 administradores (consultan)."""
     names = []
     for i in range(1, N_USERS + 1):
-        name = f"user{i:02d}"
-        users.create(conn, username=name, full_name=f"Usuario {i}", email=None, password="Concurrente123",
-                     role=ROLE_CYCLE[i % 3])
-        names.append(name)
+        email = f"user{i:02d}@test.local"
+        users.create(conn, email=email, full_name=f"Usuario {i}", password="Concurrente123",
+                     role=READER_ROLE if i % 10 in (3, 6, 9) else WRITER_ROLE)
+        names.append(email)
     return names
 
 
 @pytest.fixture
 def catalog500(conn):
     """500 productos cargados en bloque, sin movimiento de alta (stock base = INITIAL_STOCK)."""
-    rows = [(f"P{n:05d}", f"Producto {n}", f"Categoría {n % 12}", INITIAL_STOCK, 10 if n % 25 == 0 else 5,
+    with conn.transaction():
+        conn.executemany("INSERT INTO categories (name, is_active, created_at) VALUES (?, 1, ?)",
+                         [(f"Categoría {n}", "2026-01-01 00:00:00") for n in range(12)])
+    cats = [r["id"] for r in conn.all("SELECT id FROM categories ORDER BY id")]
+    rows = [(f"P{n:05d}", f"Producto {n}", cats[n % 12], INITIAL_STOCK, 10 if n % 25 == 0 else 5,
              10_000, 15_000, "2026-01-01 00:00:00", "2026-01-01 00:00:00") for n in range(1, 501)]
     with conn.transaction():
-        conn.executemany("INSERT INTO products (sku, name, category, stock, min_stock, cost_cents, price_cents, "
+        conn.executemany("INSERT INTO products (sku, name, category_id, stock, min_stock, cost_cents, price_cents, "
                          "is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)", rows)
+
+
+def conn_role(email: str) -> str:
+    n = int(email.split("@")[0][4:])
+    return READER_ROLE if n % 10 in (3, 6, 9) else WRITER_ROLE
 
 
 def _login_all(server, names):
     crowd = [User(server.base, name, "Concurrente123") for name in names]
+    for user in crowd:
+        user.can_write = conn_role(user.username) == WRITER_ROLE
     run_parallel(crowd, lambda user, i: user.login())
     assert all(u.token for u in crowd), [e for u in crowd for e in u.errors]
     return crowd
@@ -53,11 +64,12 @@ def _round(user: User, rng: random.Random, product_ids: list[int], skus: list[st
     user.get("buscar", f"/productos?q=Producto+{rng.randint(1, 500)}")
     user.get("detalle", f"/productos/{rng.choice(product_ids)}")
     sku = rng.choice(skus)
-    kind = rng.choice(["entrada", "salida", "salida"])
-    user.post("movimiento", "/movimientos/nuevo", sku=sku, kind=kind, quantity=str(rng.randint(1, 4)),
-              reference="CARGA")
+    if user.can_write:
+        kind = rng.choice(["compra", "venta", "venta"])
+        user.post("movimiento", "/movimientos/nuevo", sku=sku, kind=kind, quantity=str(rng.randint(1, 4)),
+                  reference="CARGA", request_key=f"{user.username}-{rng.random()}")
     user.get("alertas", "/alertas")
-    user.get("movimientos", "/movimientos?tipo=salida")
+    user.get("movimientos", "/movimientos?tipo=venta")
     if report:
         user.get("reporte-xlsx", "/reportes/inventario.xlsx")
 
@@ -67,7 +79,10 @@ def stock_mismatches(conn, base: int = 0) -> list[dict]:
     return conn.all(
         "SELECT p.id, p.stock, COALESCE(m.s, 0) AS total FROM products p "
         "LEFT JOIN (SELECT product_id, SUM(delta) AS s FROM stock_movements GROUP BY product_id) m "
-        "ON m.product_id = p.id WHERE p.stock <> ? + COALESCE(m.s, 0) OR p.stock < 0", (base,))
+        "ON m.product_id = p.id LEFT JOIN (SELECT product_id, SUM(quantity) AS r FROM stock_movements "
+        "WHERE kind = 'reserva' AND status = 'pendiente' GROUP BY product_id) rv ON rv.product_id = p.id "
+        "WHERE p.stock <> ? + COALESCE(m.s, 0) OR p.stock < 0 OR p.reserved <> COALESCE(rv.r, 0) "
+        "OR p.reserved > p.stock", (base,))
 
 
 def _chain_gaps(conn, product_ids) -> int:
@@ -130,6 +145,7 @@ def test_ten_concurrent_users_mixed_workflow(app, conn, team, catalog500, metric
     assert write_codes <= {302, 422}, write_codes
     assert pages["p95_ms"] <= 1000, f"p95 de páginas {pages['p95_ms']} ms"
     assert reports["p95_ms"] <= 3000, f"p95 del reporte {reports['p95_ms']} ms"
+    assert writes["p95_ms"] <= 3000, f"p95 de movimientos {writes['p95_ms']} ms"       # RNF-08: movimiento <= 3 s
     # Los 500 productos se cargaron sin movimiento de alta: stock = 200 + suma de variaciones.
     assert not stock_mismatches(conn, base=INITIAL_STOCK)
 
@@ -142,18 +158,20 @@ def test_no_overselling_under_concurrency(app, conn, make_product, team, metrics
 
         def work(user: User, index: int):
             for _ in range(10):
-                user.post("salida", "/movimientos/nuevo", sku="HOT-001", kind="salida", quantity="1",
-                          reference=f"U{index}")
+                if user.can_write:
+                    user.post("salida", "/movimientos/nuevo", sku="HOT-001", kind="venta", quantity="1",
+                              reference=f"U{index}", request_key=f"hot-{index}-{_}")
 
         run_parallel(crowd, work)
     codes = [status for u in crowd for label, _, status in u.samples if label == "salida"]
     accepted, rejected = codes.count(302), codes.count(422)
     final = conn.scalar("SELECT stock FROM products WHERE id = ?", (product,))
-    moved = conn.scalar("SELECT COALESCE(SUM(quantity), 0) FROM stock_movements WHERE product_id = ? AND kind = 'salida'",
+    moved = conn.scalar("SELECT COALESCE(SUM(quantity), 0) FROM stock_movements WHERE product_id = ? AND kind = 'venta'",
                         (product,))
     metrics.update({"intentos": len(codes), "aceptadas": accepted, "rechazadas": rejected, "stock_final": final})
-    assert len(codes) == 100 and accepted + rejected == 100, set(codes)
-    assert accepted == 50 and rejected == 50
+    writers = sum(1 for u in crowd if u.can_write)
+    assert len(codes) == writers * 10 and accepted + rejected == len(codes), set(codes)
+    assert accepted == 50 and rejected == len(codes) - 50
     assert final == 0 and moved == 50
 
 
@@ -165,10 +183,12 @@ def test_data_integrity_after_simultaneous_writes(app, conn, make_product, team,
 
         def work(user: User, index: int):
             rng = random.Random(900 + index)
-            for _ in range(30):
-                kind = rng.choice(["entrada", "salida", "salida", "ajuste"])
-                qty = rng.randint(1, 15) if kind != "ajuste" else rng.randint(0, 120)
-                user.post("mov", "/movimientos/nuevo", sku=f"INT-{rng.randint(1, 5)}", kind=kind, quantity=str(qty))
+            if not user.can_write:
+                return
+            for n in range(30):
+                kind = rng.choice(["compra", "venta", "venta", "devolucion", "reserva"])
+                user.post("mov", "/movimientos/nuevo", sku=f"INT-{rng.randint(1, 5)}", kind=kind,
+                          quantity=str(rng.randint(1, 15)), request_key=f"{user.username}-{n}")
 
         run_parallel(crowd, work)
     errors = [e for u in crowd for e in u.errors]
@@ -177,10 +197,10 @@ def test_data_integrity_after_simultaneous_writes(app, conn, make_product, team,
     assert not server_errors
     assert not stock_mismatches(conn)          # los 5 productos nacieron con movimiento de alta (stock inicial)
     gaps = _chain_gaps(conn, hot)
-    open_alerts = conn.scalar("SELECT COUNT(*) FROM stock_alerts WHERE status IN ('abierta','reconocida')")
+    open_alerts = conn.scalar("SELECT COUNT(*) FROM stock_alerts WHERE status IN ('abierta','atendida')")
     duplicated = conn.scalar("SELECT COUNT(*) FROM (SELECT product_id FROM stock_alerts WHERE status IN "
-                             "('abierta','reconocida') GROUP BY product_id HAVING COUNT(*) > 1) t")
-    expected_low = conn.scalar("SELECT COUNT(*) FROM products WHERE min_stock > 0 AND stock <= min_stock")
+                             "('abierta','atendida') GROUP BY product_id HAVING COUNT(*) > 1) t")
+    expected_low = conn.scalar("SELECT COUNT(*) FROM products WHERE min_stock > 0 AND stock - reserved <= min_stock")
     movements = conn.scalar("SELECT COUNT(*) FROM stock_movements")
     metrics.update({"movimientos_registrados": movements, "huecos_en_cadena": gaps,
                     "alertas_duplicadas": duplicated, "productos_en_escasez": expected_low})

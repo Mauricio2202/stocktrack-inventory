@@ -19,13 +19,17 @@ const fmt = (n, d = 0) => Number(n).toLocaleString("en-US", { minimumFractionDig
 const count = (pred) => results.filter(pred).length;
 const total = results.length, passed = count((r) => r.outcome === "passed");
 const failed = count((r) => r.outcome === "failed"), skipped = count((r) => r.outcome === "skipped");
-const TOTAL_TESTS = 57; // total de pruebas de la última corrida de `pytest tests`
+const TOTAL_TESTS = 85; // total de pruebas de la última corrida de `pytest tests`
 const CRITERIA = [
   ["PA-01", "Reportes", "PDF y Excel válidos, con totales y filtros correctos"],
   ["PA-02", "Alertas", "Correo SMTP, notificaciones por rol y sin duplicados"],
   ["PA-03", "Concurrencia", "10 usuarios, sin sobreventa ni datos corruptos"],
-  ["RN-01", "Roles", "Administrador, gerente, almacenista y consulta"],
+  ["RN-01", "Roles", "Matriz de permisos de los 3 roles (23 rutas y 9 escrituras)"],
   ["RN-02", "Capacidad", "Tope de 100,000 registros y rendimiento a ese volumen"],
+  ["RU-A", "Administrador", "Usuarios, catálogo, validación de reservas y reportes foliados"],
+  ["RU-E", "Encargado", "Entradas, salidas, alertas atendidas y reportes"],
+  ["RU-C", "Consulta", "Solo lectura, búsqueda y existencias"],
+  ["RNF", "No funcionales", "Sesión, transacciones, integridad y diseño adaptable"],
 ];
 const per = CRITERIA.map(([id]) => {
   const rs = results.filter((r) => r.case_id.startsWith(id + "."));
@@ -80,9 +84,10 @@ function card(slide, x, y, w, h, big, label, color, name) {
 // ============================================================ 1 · Portada
 pres.addSection({ title: "Resumen" });
 let s = pres.addSlide({ masterName: "TITULO_OSCURO", sectionTitle: "Resumen" });
-s.addImage({ path: path.join(ASSETS, "logo-white.png"), x: 0.6, y: 0.5, w: 2.6, h: 0.65, altText: "Logo StockTrack, control total de inventarios" });
+s.addShape(pres.ShapeType.roundRect, { x: 0.5, y: 0.4, w: 2.9, h: 1.0, fill: { color: "FFFFFF" }, rectRadius: 0.1, line: { color: "FFFFFF" }, objectName: "Tarjeta logo" });
+s.addImage({ path: path.join(ASSETS, "logo.png"), x: 0.62, y: 0.5, w: 2.66, h: 0.8, altText: "Logo StockTrack, control total de inventarios" });
 s.addText("Pruebas de aceptación", { placeholder: "title" });
-s.addText("Estado de la ejecución · 14 de noviembre de 2026", { x: 0.6, y: 3.05, w: 4.6, h: 0.4, fontSize: 16, color: C.background2, margin: 0, isTextBox: true, objectName: "Subtítulo" });
+s.addText("Estado de la ejecución · 15 de noviembre de 2026", { x: 0.6, y: 3.05, w: 4.6, h: 0.4, fontSize: 16, color: C.background2, margin: 0, isTextBox: true, objectName: "Subtítulo" });
 s.addText(`${passed}/${total}`, { x: 0.6, y: 3.7, w: 2.1, h: 0.9, fontFace: "Cambria", fontSize: 50, bold: true, color: C.accent4, margin: 0, valign: "middle", isTextBox: true, objectName: "Cifra principal" });
 s.addText("casos de aceptación aprobados", { x: 2.75, y: 3.7, w: 2.5, h: 0.9, fontSize: 14, color: C.background2, margin: 0, valign: "middle", isTextBox: true, objectName: "Etiqueta cifra" });
 s.addImage({ path: path.join(ASSETS, "dashboard.png"), x: 5.5, y: 0.7, w: 4.0, h: 2.49, shadow: shadow(), altText: "Panel de inventario de StockTrack con indicadores y productos en escasez" });
@@ -122,11 +127,11 @@ s.addChart(pres.charts.BAR, [
 });
 const rows = [];
 CRITERIA.forEach(([id, name, desc], i) => {
-  rows.push({ text: `${id} · ${name}`, options: { bold: true, fontSize: 14, color: HEX.navy, breakLine: true, paraSpaceBefore: i ? 16 : 0 } });
-  rows.push({ text: desc, options: { fontSize: 11, color: HEX.slate, breakLine: i < CRITERIA.length - 1 } });
+  rows.push({ text: `${id} · ${name}`, options: { bold: true, fontSize: 12, color: HEX.navy, breakLine: true, paraSpaceBefore: i ? 7 : 0 } });
+  rows.push({ text: desc, options: { fontSize: 9.5, color: HEX.slate, breakLine: i < CRITERIA.length - 1 } });
 });
 s.addText(rows, { x: 5.7, y: 1.3, w: 3.8, h: 3.75, valign: "top", margin: 0, isTextBox: true, objectName: "Criterios" });
-s.addNotes("PA-01 a PA-03 son las pruebas de aceptación pedidas por el cliente. RN-01 y RN-02 cubren el requerimiento de roles y la restricción de 100,000 registros.");
+s.addNotes("PA-01 a PA-03 son las pruebas de aceptación pedidas por el cliente. RN-01 y RN-02 cubren roles y capacidad. RU-A, RU-E, RU-C y RNF cubren el documento de requerimientos por tipo de usuario.");
 
 // ============================================================ 4 · Concurrencia
 pres.addSection({ title: "Rendimiento" });
@@ -180,7 +185,8 @@ s.addText([
   { text: "Limitaciones de esta corrida", options: { bold: true, fontSize: 16, color: HEX.navy, breakLine: true, fontFace: "Cambria", paraSpaceAfter: 4 } },
   { text: "Base probada: SQLite; PostgreSQL sin ejecutar", options: { bullet: true, breakLine: true, paraSpaceAfter: 8 } },
   { text: "Correo probado con un servidor SMTP de prueba", options: { bullet: true, breakLine: true, paraSpaceAfter: 8 } },
-  { text: "Carga medida en un solo equipo, por loopback", options: { bullet: true, breakLine: true, paraSpaceAfter: 20 } },
+  { text: "Carga medida en un solo equipo, por loopback", options: { bullet: true, breakLine: true, paraSpaceAfter: 8 } },
+  { text: "Navegadores: solo Chromium automatizado", options: { bullet: true, breakLine: true, paraSpaceAfter: 20 } },
   { text: "Siguientes pasos", options: { bold: true, fontSize: 16, color: HEX.navy, breakLine: true, fontFace: "Cambria", paraSpaceAfter: 4 } },
   { text: "Correr la suite con PostgreSQL y SMTP real", options: { bullet: true, breakLine: true, paraSpaceAfter: 8 } },
   { text: "Prueba de carga en el servidor de despliegue", options: { bullet: true, breakLine: true, paraSpaceAfter: 8 } },

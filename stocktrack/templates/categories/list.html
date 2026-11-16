@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf %}
+{% block title %}Categorías{% endblock %}
+{% block heading %}Categorías{% endblock %}
+{% block content %}
+{% if can('categories.edit') %}
+<form class="card form narrow" method="post" action="{{ url_for('categories.create') }}" novalidate>
+  {{ csrf() }}
+  <label class="field {{ 'has-error' if errors.get('name') }}"><span class="label">Nueva categoría <em>*</em></span>
+    <input name="name" value="{{ values.get('name', '') }}" maxlength="60" required autocomplete="off">
+    {% if errors.get('name') %}<span class="err">{{ errors.name }}</span>{% endif %}</label>
+  <div class="form-actions"><button class="btn btn-primary" type="submit">Crear categoría</button></div>
+</form>
+{% endif %}
+<section class="card flush">
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Categoría</th><th class="num">Productos activos</th><th>Estado</th>{% if can('categories.edit') %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for c in rows %}
+      <tr class="{{ 'row-archived' if not c.is_active }}">
+        <td>{% if can('categories.edit') %}
+          <form method="post" action="{{ url_for('categories.rename', category_id=c.id) }}" class="inline-form">{{ csrf() }}
+            <input name="name" value="{{ c.name }}" maxlength="60" aria-label="Nombre de la categoría" required>
+            <button class="link-btn" type="submit">Guardar nombre</button></form>
+          {% else %}<a href="{{ url_for('products.index', categoria=c.id) }}">{{ c.name }}</a>{% endif %}</td>
+        <td class="num"><a href="{{ url_for('products.index', categoria=c.id) }}">{{ c.product_count|num }}</a></td>
+        <td><span class="badge {{ 'badge-ok' if c.is_active else 'badge-muted' }}">{{ 'Activa' if c.is_active else 'Desactivada' }}</span></td>
+        {% if can('categories.edit') %}<td class="actions">
+          <form method="post" action="{{ url_for('categories.toggle', category_id=c.id) }}">{{ csrf() }}
+            <input type="hidden" name="active" value="{{ 0 if c.is_active else 1 }}">
+            <button class="link-btn" type="submit">{{ 'Desactivar' if c.is_active else 'Activar' }}</button></form></td>{% endif %}
+      </tr>
+    {% else %}<tr><td colspan="4" class="empty">Aún no hay categorías.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

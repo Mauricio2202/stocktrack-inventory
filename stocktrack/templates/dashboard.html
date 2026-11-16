@@ -10,7 +10,8 @@
 <section class="kpis" aria-label="Indicadores">
   <article class="kpi"><span>Productos activos</span><strong>{{ t.products|num }}</strong></article>
   <article class="kpi"><span>Unidades en stock</span><strong>{{ t.units|num }}</strong></article>
-  <article class="kpi"><span>Valor a costo</span><strong>{{ t.cost_cents|money }}</strong></article>
+  <article class="kpi"><span>Unidades reservadas</span><strong>{{ t.reserved|num }}</strong></article>
+  {% if can('movements.view') %}<article class="kpi"><span>Valor a costo</span><strong>{{ t.cost_cents|money }}</strong></article>{% endif %}
   <article class="kpi {{ 'kpi-warn' if t.low_count }}"><span>En escasez</span><strong>{{ t.low_count|num }}</strong></article>
   <article class="kpi {{ 'kpi-bad' if t.out_count }}"><span>Agotados</span><strong>{{ t.out_count|num }}</strong></article>
 </section>
@@ -21,12 +22,12 @@
       <a href="{{ url_for('products.index', escasez=1) }}">Ver todos</a></header>
     {% if stats.low %}
     <table class="table">
-      <thead><tr><th>Producto</th><th class="num">Stock</th><th class="num">Mínimo</th><th>Estado</th></tr></thead>
+      <thead><tr><th>Producto</th><th class="num">Disponible</th><th class="num">Mínimo</th><th>Estado</th></tr></thead>
       <tbody>
       {% for p in stats.low %}
         <tr><td><a href="{{ url_for('products.detail', product_id=p.id) }}">{{ p.name }}</a><small class="muted block">{{ p.sku }}</small></td>
-            <td class="num"><strong>{{ p.stock|num }}</strong></td><td class="num">{{ p.min_stock|num }}</td>
-            <td>{{ status_badge(p.stock, p.min_stock) }}</td></tr>
+            <td class="num"><strong>{{ p.available|num }}</strong></td><td class="num">{{ p.min_stock|num }}</td>
+            <td>{{ status_badge(p.available, p.min_stock) }}</td></tr>
       {% endfor %}
       </tbody>
     </table>
@@ -52,6 +53,16 @@
   </section>
 </div>
 
+{% if can('reservations.validate') and pending %}
+<section class="card">
+  <header class="card-head"><h2>Reservas de segundo nivel por validar</h2><a href="{{ url_for('movements.reservations') }}">Validar</a></header>
+  <ul class="list">
+    {% for m in pending %}<li><div>{{ m.product_name }} <small class="muted block">{{ m.created_at|local_dt }} · {{ m.user_name }}</small></div><strong>{{ m.quantity|num }} uds.</strong></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if can('alerts.view') %}
 <div class="grid-2">
   <section class="card">
     <header class="card-head"><h2>Alertas vigentes</h2><a href="{{ url_for('alerts.index') }}">Ver alertas</a></header>
@@ -60,7 +71,7 @@
       {% for a in active_alerts %}
       <li><div><a href="{{ url_for('products.detail', product_id=a.product_id) }}">{{ a.name }}</a>
           <small class="muted block">{{ a.created_at|local_dt }} · stock {{ a.current_stock|num }} / mínimo {{ a.current_min|num }}</small></div>
-          <span class="badge {{ 'badge-warn' if a.status == 'abierta' else 'badge-info' }}">{{ 'Abierta' if a.status == 'abierta' else 'Reconocida' }}</span></li>
+          <span class="badge {{ 'badge-warn' if a.status == 'abierta' else 'badge-info' }}">{{ 'Abierta' if a.status == 'abierta' else 'Atendida' }}</span></li>
       {% endfor %}
     </ul>
     {% else %}<p class="empty">✔ No hay alertas vigentes.</p>{% endif %}
@@ -79,4 +90,5 @@
     {% else %}<p class="empty">Aún no hay movimientos.</p>{% endif %}
   </section>
 </div>
+{% endif %}
 {% endblock %}

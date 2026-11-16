@@ -1,8 +1,9 @@
 """Alertas de escasez y notificaciones internas.
 
-Regla: un producto activo con umbral mínimo > 0 está en escasez cuando stock <= mínimo.
-Mientras siga en escasez existe UNA sola alerta vigente (abierta o reconocida); al reponer
-el stock por encima del mínimo, la alerta se resuelve sola.
+Regla: un producto activo con umbral mínimo > 0 está en escasez cuando las existencias
+disponibles (stock - reservado) <= mínimo. Mientras siga en escasez existe UNA sola alerta
+vigente (abierta o atendida); al reponer por encima del mínimo, la alerta se resuelve sola.
+El encargado puede marcarla como "atendida" (RF-26) sin que desaparezca hasta resolverse.
 """
 from __future__ import annotations
 
@@ -10,8 +11,8 @@ from ..db import utcnow_str
 from ..errors import NotFound
 from . import audit
 
-NOTIFY_ROLES = ("admin", "gerente", "almacenista")
-VIGENTES = "('abierta','reconocida')"
+NOTIFY_ROLES = ("admin", "encargado")
+VIGENTES = "('abierta','atendida')"
 
 
 def is_low(stock: int, min_stock: int) -> bool:
@@ -20,9 +21,9 @@ def is_low(stock: int, min_stock: int) -> bool:
 
 def _notify(conn, alert_id: int, product: dict) -> None:
     message = (f"Stock bajo: {product['name']} ({product['sku']}) tiene "
-               f"{product['stock']} unidades; el mínimo es {product['min_stock']}.")
+               f"{product['available']} unidades disponibles; el mínimo es {product['min_stock']}.")
     users = conn.all(
-        "SELECT id FROM users WHERE is_active = 1 AND role IN ('admin','gerente','almacenista')"
+        "SELECT id FROM users WHERE is_active = 1 AND role IN ('admin','encargado')"
     )
     now = utcnow_str()
     conn.executemany(
@@ -35,19 +36,20 @@ def evaluate_product(conn, product_id: int) -> int | None:
     """Crea o resuelve la alerta de un producto. Devuelve el id si se creó una alerta nueva.
     Debe llamarse dentro de la transacción que modificó el producto."""
     p = conn.one(
-        "SELECT id, sku, name, stock, min_stock, is_active FROM products WHERE id = ?", (product_id,)
+        "SELECT id, sku, name, stock, reserved, stock - reserved AS available, min_stock, is_active "
+        "FROM products WHERE id = ?", (product_id,)
     )
     if not p:
         return None
     current = conn.one(
         f"SELECT id FROM stock_alerts WHERE product_id = ? AND status IN {VIGENTES}", (product_id,)
     )
-    low = p["is_active"] == 1 and is_low(p["stock"], p["min_stock"])
+    low = p["is_active"] == 1 and is_low(p["available"], p["min_stock"])
     if low and not current:
         alert_id = conn.insert(
             "INSERT INTO stock_alerts (product_id, status, stock_at_alert, min_stock_at_alert, created_at) "
             "VALUES (?, 'abierta', ?, ?, ?)",
-            (product_id, p["stock"], p["min_stock"], utcnow_str()),
+            (product_id, p["available"], p["min_stock"], utcnow_str()),
         )
         _notify(conn, alert_id, p)
         return alert_id
@@ -64,7 +66,7 @@ def scan_all(conn) -> list[int]:
     new_ids: list[int] = []
     with conn.transaction():
         missing = conn.all(
-            "SELECT p.id FROM products p WHERE p.is_active = 1 AND p.min_stock > 0 AND p.stock <= p.min_stock "
+            "SELECT p.id FROM products p WHERE p.is_active = 1 AND p.min_stock > 0 AND p.stock - p.reserved <= p.min_stock "
             f"AND NOT EXISTS (SELECT 1 FROM stock_alerts a WHERE a.product_id = p.id AND a.status IN {VIGENTES}) "
             "ORDER BY p.id"
         )
@@ -74,7 +76,7 @@ def scan_all(conn) -> list[int]:
                 new_ids.append(alert_id)
         stale = conn.all(
             f"SELECT a.product_id AS id FROM stock_alerts a JOIN products p ON p.id = a.product_id "
-            f"WHERE a.status IN {VIGENTES} AND (p.is_active = 0 OR p.min_stock = 0 OR p.stock > p.min_stock)"
+            f"WHERE a.status IN {VIGENTES} AND (p.is_active = 0 OR p.min_stock = 0 OR p.stock - p.reserved > p.min_stock)"
         )
         for row in stale:
             evaluate_product(conn, row["id"])
@@ -85,8 +87,10 @@ def get_context(conn, alert_id: int) -> dict | None:
     """Alerta + datos del producto, para armar el correo."""
     return conn.one(
         "SELECT a.id, a.status, a.created_at, a.stock_at_alert, a.min_stock_at_alert, "
-        "p.id AS product_id, p.sku, p.name, p.category, p.location, p.stock, p.min_stock "
-        "FROM stock_alerts a JOIN products p ON p.id = a.product_id WHERE a.id = ?",
+        "p.id AS product_id, p.sku, p.name, c.name AS category, p.location, p.stock, p.reserved, "
+        "p.stock - p.reserved AS available, p.min_stock "
+        "FROM stock_alerts a JOIN products p ON p.id = a.product_id "
+        "LEFT JOIN categories c ON c.id = p.category_id WHERE a.id = ?",
         (alert_id,),
     )
 
@@ -121,29 +125,30 @@ def list_alerts(conn, status: str = "vigentes", page: int = 1, per_page: int = 2
     where, params = "", []
     if status == "vigentes":
         where = f"WHERE a.status IN {VIGENTES}"
-    elif status in ("abierta", "reconocida", "resuelta"):
+    elif status in ("abierta", "atendida", "resuelta"):
         where, params = "WHERE a.status = ?", [status]
     total = int(conn.scalar(f"SELECT COUNT(*) FROM stock_alerts a {where}", params) or 0)
     rows = conn.all(
-        "SELECT a.*, p.sku, p.name, p.stock AS current_stock, p.min_stock AS current_min, "
-        "u.full_name AS ack_name FROM stock_alerts a JOIN products p ON p.id = a.product_id "
-        f"LEFT JOIN users u ON u.id = a.acknowledged_by {where} "
+        "SELECT a.*, p.sku, p.name, p.stock - p.reserved AS current_stock, p.min_stock AS current_min, "
+        "u.full_name AS attended_name FROM stock_alerts a JOIN products p ON p.id = a.product_id "
+        f"LEFT JOIN users u ON u.id = a.attended_by {where} "
         "ORDER BY a.created_at DESC, a.id DESC LIMIT ? OFFSET ?",
         params + [per_page, max(page - 1, 0) * per_page],
     )
     return rows, total
 
 
-def acknowledge(conn, alert_id: int, actor: dict) -> None:
+def mark_attended(conn, alert_id: int, actor: dict) -> None:
+    """RF-26: el encargado marca la alerta como atendida."""
     with conn.transaction():
         cur = conn.execute(
-            "UPDATE stock_alerts SET status = 'reconocida', acknowledged_by = ?, acknowledged_at = ? "
+            "UPDATE stock_alerts SET status = 'atendida', attended_by = ?, attended_at = ? "
             "WHERE id = ? AND status = 'abierta'",
             (actor.get("id"), utcnow_str(), alert_id),
         )
         if cur.rowcount == 0:
             raise NotFound("La alerta no existe o ya no está abierta")
-        audit.log(conn, actor, "alert.acknowledge", "stock_alert", alert_id)
+        audit.log(conn, actor, "alert.attend", "stock_alert", alert_id)
 
 
 # --- notificaciones internas ---------------------------------------------------

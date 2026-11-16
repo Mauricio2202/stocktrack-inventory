@@ -1,4 +1,4 @@
-"""Productos del inventario: validación, alta/edición/archivo, búsqueda y estadísticas."""
+"""Productos: alta/edición/desactivación (RF-06..07), stock mínimo (RF-09), consulta y búsqueda (RF-30..34)."""
 from __future__ import annotations
 
 import re
@@ -16,11 +16,13 @@ MAX_UNITS = 10_000_000
 MAX_MONEY_CENTS = 9_999_999_999  # $99,999,999.99
 
 SORTS = {
-    "sku": "sku", "name": "name", "category": "category", "stock": "stock",
-    "price": "price_cents", "updated": "updated_at",
+    "sku": "p.sku", "name": "p.name", "category": "c.name", "stock": "p.stock",
+    "available": "(p.stock - p.reserved)", "price": "p.price_cents", "updated": "p.updated_at",
 }
-COLUMNS = ("id, sku, name, description, category, brand, location, stock, min_stock, "
-           "cost_cents, price_cents, is_active, created_at, updated_at")
+COLUMNS = ("p.id, p.sku, p.name, p.description, p.category_id, c.name AS category, p.brand, p.location, "
+           "p.stock, p.reserved, p.stock - p.reserved AS available, p.min_stock, p.cost_cents, p.price_cents, "
+           "p.is_active, p.created_at, p.updated_at")
+FROM = "FROM products p LEFT JOIN categories c ON c.id = p.category_id"
 
 
 def parse_money(text, label: str) -> int:
@@ -69,10 +71,18 @@ def clean_form(form: Mapping, *, with_initial_stock: bool = False) -> dict:
     if len(name) < 2:
         errors["name"] = "El nombre es obligatorio (mínimo 2 caracteres)"
 
+    category_id = None
+    raw_category = text("category_id", 12)
+    if raw_category:
+        if not raw_category.isdigit():
+            errors["category_id"] = "Elige una categoría válida"
+        else:
+            category_id = int(raw_category)
+
     data = {
         "sku": sku, "name": name,
         "description": text("description", 500) or None,
-        "category": text("category", 60) or None,
+        "category_id": category_id,
         "brand": text("brand", 60) or None,
         "location": text("location", 60) or None,
     }
@@ -104,34 +114,35 @@ def _escape_like(text: str) -> str:
 def _filters(q="", category="", status="active", low_only=False):
     where, params = [], []
     if status == "active":
-        where.append("is_active = 1")
-    elif status == "archived":
-        where.append("is_active = 0")
-    if q:
+        where.append("p.is_active = 1")
+    elif status == "inactive":
+        where.append("p.is_active = 0")
+    if q:  # RF-32: por nombre, código, marca o categoría
         like = f"%{_escape_like(q.strip().lower())}%"
-        where.append("(LOWER(sku) LIKE ? ESCAPE '\\' OR LOWER(name) LIKE ? ESCAPE '\\' "
-                     "OR LOWER(COALESCE(brand, '')) LIKE ? ESCAPE '\\')")
-        params += [like, like, like]
+        where.append("(LOWER(p.sku) LIKE ? ESCAPE '\\' OR LOWER(p.name) LIKE ? ESCAPE '\\' "
+                     "OR LOWER(COALESCE(p.brand, '')) LIKE ? ESCAPE '\\' "
+                     "OR LOWER(COALESCE(c.name, '')) LIKE ? ESCAPE '\\')")
+        params += [like, like, like, like]
     if category:
-        where.append("category = ?")
-        params.append(category)
+        where.append("p.category_id = ?")
+        params.append(int(category))
     if low_only:
-        where.append("min_stock > 0 AND stock <= min_stock")
+        where.append("p.min_stock > 0 AND p.stock - p.reserved <= p.min_stock")
     return ("WHERE " + " AND ".join(where)) if where else "", params
 
 
 def _decorate(row: dict) -> dict:
-    row["is_low"] = alerts.is_low(row["stock"], row["min_stock"])
+    row["is_low"] = alerts.is_low(row["available"], row["min_stock"])
     return row
 
 
 def search(conn, *, q="", category="", status="active", low_only=False,
            sort="name", direction="asc", page=1, per_page=25):
     where, params = _filters(q, category, status, low_only)
-    total = int(conn.scalar(f"SELECT COUNT(*) FROM products {where}", params) or 0)
-    order = f"{SORTS.get(sort, 'name')} {'DESC' if direction == 'desc' else 'ASC'}, id ASC"
+    total = int(conn.scalar(f"SELECT COUNT(*) {FROM} {where}", params) or 0)
+    order = f"{SORTS.get(sort, 'p.name')} {'DESC' if direction == 'desc' else 'ASC'}, p.id ASC"
     rows = conn.all(
-        f"SELECT {COLUMNS} FROM products {where} ORDER BY {order} LIMIT ? OFFSET ?",
+        f"SELECT {COLUMNS} {FROM} {where} ORDER BY {order} LIMIT ? OFFSET ?",
         params + [per_page, max(page - 1, 0) * per_page],
     )
     return [_decorate(r) for r in rows], total
@@ -140,33 +151,27 @@ def search(conn, *, q="", category="", status="active", low_only=False,
 def iter_for_report(conn, *, category="", low_only=False):
     where, params = _filters("", category, "active", low_only)
     return conn.iter_rows(
-        f"SELECT {COLUMNS} FROM products {where} ORDER BY COALESCE(category, ''), name, id", params)
+        f"SELECT {COLUMNS} {FROM} {where} ORDER BY COALESCE(c.name, ''), p.name, p.id", params)
 
 
 def count_for_report(conn, *, category="", low_only=False) -> int:
     where, params = _filters("", category, "active", low_only)
-    return int(conn.scalar(f"SELECT COUNT(*) FROM products {where}", params) or 0)
+    return int(conn.scalar(f"SELECT COUNT(*) {FROM} {where}", params) or 0)
 
 
 def get(conn, product_id: int) -> dict | None:
-    row = conn.one(f"SELECT {COLUMNS} FROM products WHERE id = ?", (product_id,))
+    row = conn.one(f"SELECT {COLUMNS} {FROM} WHERE p.id = ?", (product_id,))
     return _decorate(row) if row else None
 
 
 def get_by_sku(conn, sku: str) -> dict | None:
-    row = conn.one(f"SELECT {COLUMNS} FROM products WHERE sku = ?", ((sku or "").strip().upper(),))
+    row = conn.one(f"SELECT {COLUMNS} {FROM} WHERE p.sku = ?", ((sku or "").strip().upper(),))
     return _decorate(row) if row else None
 
 
 def suggestions(conn, q: str, limit: int = 8) -> list[dict]:
     rows, _ = search(conn, q=q, per_page=limit, sort="sku")
     return [{"id": r["id"], "sku": r["sku"], "name": r["name"], "stock": r["stock"]} for r in rows]
-
-
-def categories(conn) -> list[str]:
-    rows = conn.all("SELECT DISTINCT category FROM products WHERE is_active = 1 AND category IS NOT NULL "
-                    "AND category <> '' ORDER BY category")
-    return [r["category"] for r in rows]
 
 
 def count_active(conn) -> int:
@@ -182,19 +187,29 @@ def _check_capacity(conn, max_active: int) -> None:
             "Archiva productos que ya no se manejan para poder agregar nuevos.")
 
 
+def _check_category(conn, category_id, current_id=None) -> None:
+    """La categoría debe existir y estar activa (salvo que el producto ya la tuviera)."""
+    if category_id is None or category_id == current_id:
+        return
+    row = conn.one("SELECT is_active FROM categories WHERE id = ?", (category_id,))
+    if not row or not row["is_active"]:
+        raise ValidationError("Revisa los campos marcados", {"category_id": "Elige una categoría activa"})
+
+
 def create(conn, data: dict, actor: dict, max_active: int) -> int:
     with conn.transaction():
         conn.advisory_lock(LOCK_KEY)
         _check_capacity(conn, max_active)
         if conn.scalar("SELECT 1 FROM products WHERE sku = ?", (data["sku"],)):
             raise Conflict("Ya existe un producto con ese SKU", {"sku": "Este SKU ya está registrado"})
+        _check_category(conn, data.get("category_id"))
         now = utcnow_str()
         try:
             product_id = conn.insert(
-                "INSERT INTO products (sku, name, description, category, brand, location, stock, min_stock, "
+                "INSERT INTO products (sku, name, description, category_id, brand, location, stock, min_stock, "
                 "cost_cents, price_cents, is_active, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 1, ?, ?)",
-                (data["sku"], data["name"], data.get("description"), data.get("category"),
+                (data["sku"], data["name"], data.get("description"), data.get("category_id"),
                  data.get("brand"), data.get("location"), data["min_stock"], data["cost_cents"],
                  data["price_cents"], now, now),
             )
@@ -205,32 +220,33 @@ def create(conn, data: dict, actor: dict, max_active: int) -> int:
         audit.log(conn, actor, "product.create", "product", product_id, f"{data['sku']} · {data['name']}")
         initial = int(data.get("initial_stock") or 0)
         if initial > 0:
-            stock.register_movement(conn, product_id, "entrada", initial, actor,
+            stock.register_movement(conn, product_id, "compra", initial, actor,
                                     reference="ALTA", notes="Stock inicial")
         else:
             alerts.evaluate_product(conn, product_id)
     return product_id
 
 
-_TRACKED = ("sku", "name", "description", "category", "brand", "location", "min_stock",
+_TRACKED = ("sku", "name", "description", "category_id", "brand", "location", "min_stock",
             "cost_cents", "price_cents")
 
 
 def update(conn, product_id: int, data: dict, actor: dict) -> None:
     with conn.transaction():
-        current = conn.one(f"SELECT {COLUMNS} FROM products WHERE id = ?" + conn.for_update, (product_id,))
+        current = conn.one(f"SELECT {COLUMNS} {FROM} WHERE p.id = ?" + conn.for_update.replace("FOR UPDATE", "FOR UPDATE OF p"), (product_id,))
         if not current:
             raise NotFound("El producto no existe")
         clash = conn.scalar("SELECT id FROM products WHERE sku = ? AND id <> ?", (data["sku"], product_id))
         if clash:
             raise Conflict("Ya existe un producto con ese SKU", {"sku": "Este SKU ya está registrado"})
+        _check_category(conn, data.get("category_id"), current["category_id"])
         changes = [f"{f}: {current[f]!r} -> {data[f]!r}" for f in _TRACKED if current[f] != data[f]]
         if not changes:
             return
         conn.execute(
-            "UPDATE products SET sku = ?, name = ?, description = ?, category = ?, brand = ?, location = ?, "
+            "UPDATE products SET sku = ?, name = ?, description = ?, category_id = ?, brand = ?, location = ?, "
             "min_stock = ?, cost_cents = ?, price_cents = ?, updated_at = ? WHERE id = ?",
-            (data["sku"], data["name"], data.get("description"), data.get("category"), data.get("brand"),
+            (data["sku"], data["name"], data.get("description"), data.get("category_id"), data.get("brand"),
              data.get("location"), data["min_stock"], data["cost_cents"], data["price_cents"],
              utcnow_str(), product_id),
         )
@@ -238,13 +254,16 @@ def update(conn, product_id: int, data: dict, actor: dict) -> None:
         alerts.evaluate_product(conn, product_id)
 
 
-def archive(conn, product_id: int, actor: dict) -> None:
+def deactivate(conn, product_id: int, actor: dict) -> None:
     with conn.transaction():
+        reserved = conn.scalar("SELECT reserved FROM products WHERE id = ?", (product_id,))
+        if reserved:
+            raise ValidationError(f"No se puede desactivar: tiene {reserved} unidad(es) con reservas pendientes de validación")
         cur = conn.execute("UPDATE products SET is_active = 0, updated_at = ? WHERE id = ? AND is_active = 1",
                            (utcnow_str(), product_id))
         if cur.rowcount == 0:
-            raise NotFound("El producto no existe o ya está archivado")
-        audit.log(conn, actor, "product.archive", "product", product_id)
+            raise NotFound("El producto no existe o ya está desactivado")
+        audit.log(conn, actor, "product.deactivate", "product", product_id)
         alerts.evaluate_product(conn, product_id)  # resuelve su alerta vigente
 
 
@@ -263,20 +282,20 @@ def restore(conn, product_id: int, actor: dict, max_active: int) -> None:
 # --- panel principal -----------------------------------------------------------
 def dashboard_stats(conn) -> dict:
     totals = conn.one(
-        "SELECT COUNT(*) AS products, COALESCE(SUM(stock), 0) AS units, "
+        "SELECT COUNT(*) AS products, COALESCE(SUM(stock), 0) AS units, COALESCE(SUM(reserved), 0) AS reserved, "
         "COALESCE(SUM(stock * cost_cents), 0) AS cost_cents, "
         "COALESCE(SUM(stock * price_cents), 0) AS value_cents, "
-        "COALESCE(SUM(CASE WHEN min_stock > 0 AND stock <= min_stock THEN 1 ELSE 0 END), 0) AS low_count, "
-        "COALESCE(SUM(CASE WHEN stock = 0 THEN 1 ELSE 0 END), 0) AS out_count "
+        "COALESCE(SUM(CASE WHEN min_stock > 0 AND stock - reserved <= min_stock THEN 1 ELSE 0 END), 0) AS low_count, "
+        "COALESCE(SUM(CASE WHEN stock - reserved = 0 THEN 1 ELSE 0 END), 0) AS out_count "
         "FROM products WHERE is_active = 1"
     )
     by_category = conn.all(
-        "SELECT COALESCE(category, 'Sin categoría') AS category, COUNT(*) AS products, "
-        "COALESCE(SUM(stock), 0) AS units FROM products WHERE is_active = 1 "
-        "GROUP BY COALESCE(category, 'Sin categoría') ORDER BY units DESC, category LIMIT 8"
+        "SELECT COALESCE(c.name, 'Sin categoría') AS category, COUNT(*) AS products, "
+        "COALESCE(SUM(p.stock), 0) AS units FROM products p LEFT JOIN categories c ON c.id = p.category_id "
+        "WHERE p.is_active = 1 GROUP BY COALESCE(c.name, 'Sin categoría') ORDER BY units DESC, category LIMIT 8"
     )
     low = conn.all(
-        f"SELECT {COLUMNS} FROM products WHERE is_active = 1 AND min_stock > 0 AND stock <= min_stock "
-        "ORDER BY (stock * 1.0 / min_stock) ASC, name ASC LIMIT 8"
+        f"SELECT {COLUMNS} {FROM} WHERE p.is_active = 1 AND p.min_stock > 0 AND p.stock - p.reserved <= p.min_stock "
+        "ORDER BY ((p.stock - p.reserved) * 1.0 / p.min_stock) ASC, p.name ASC LIMIT 8"
     )
     return {"totals": totals, "by_category": by_category, "low": [_decorate(r) for r in low]}

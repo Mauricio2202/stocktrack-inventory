@@ -9,17 +9,19 @@ Aplicación monolítica con arquitectura Model-View-Template (Flask + Jinja2):
 from __future__ import annotations
 
 import logging
+import time
 
-from flask import Flask, g, jsonify, render_template, request, session
+from flask import Flask, flash, g, jsonify, render_template, request, session
 from werkzeug.exceptions import HTTPException
 
 from . import deps, filters, security
 from .config import load_config
 from .db import Database
 from .models import alerts as alerts_model
+from .models import stock as stock_model
 from .models import users as users_model
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 
 
 def create_app(test_config: dict | None = None) -> Flask:
@@ -49,6 +51,14 @@ def create_app(test_config: dict | None = None) -> Flask:
         security.check_csrf()
         user_id = session.get("uid")
         if user_id:
+            idle = app.config["SESSION_IDLE_MINUTES"] * 60
+            now = time.time()
+            if idle and now - session.get("last_seen", now) > idle:
+                session.clear()
+                flash("Tu sesión se cerró por inactividad. Inicia sesión de nuevo.", "warning")
+                return
+            if request.endpoint != "idle_ping":
+                session["last_seen"] = now
             user = users_model.get(deps.get_db(), user_id)
             if user and user["is_active"]:
                 g.user = user
@@ -58,12 +68,16 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.context_processor
     def inject_globals():
         extra = {"can": security.can, "csrf_token": security.csrf_token,
-                 "ROLE_LABELS": users_model.ROLE_LABELS, "app_version": __version__,
-                 "open_alerts": 0, "unread_notifications": 0}
+                 "ROLE_LABELS": users_model.ROLE_LABELS, "ROLE_DESCRIPTIONS": users_model.ROLE_DESCRIPTIONS, "app_version": __version__,
+                 "open_alerts": 0, "unread_notifications": 0, "pending_reservations": 0,
+                 "idle_seconds": app.config["SESSION_IDLE_MINUTES"] * 60}
         if g.get("user"):
             conn = deps.get_db()
-            extra["open_alerts"] = alerts_model.open_count(conn)
-            extra["unread_notifications"] = alerts_model.unread_count(conn, g.user["id"])
+            if security.can("alerts.view"):
+                extra["open_alerts"] = alerts_model.open_count(conn)
+                extra["unread_notifications"] = alerts_model.unread_count(conn, g.user["id"])
+            if security.can("reservations.validate"):
+                extra["pending_reservations"] = stock_model.pending_reservations_count(conn)
         return extra
 
     @app.after_request
@@ -97,6 +111,14 @@ def create_app(test_config: dict | None = None) -> Flask:
         app.logger.exception("Error no controlado")
         return render_template("error.html", code=500, title="Error interno",
                                message="Ocurrió un error inesperado. Ya quedó registrado."), 500
+
+    @app.post("/session/ping")
+    def idle_ping():
+        """Mantiene viva la sesión cuando el usuario sigue activo en la página (lo llama app.js)."""
+        if not g.get("user"):
+            return jsonify(status="expired"), 401
+        session["last_seen"] = time.time()
+        return jsonify(status="ok")
 
     @app.get("/health")
     def health():

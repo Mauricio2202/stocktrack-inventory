@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 RESULTS_PATH = Path(os.environ.get("ACCEPTANCE_RESULTS", ROOT / "docs" / "acceptance" / "results.json"))
 _results: dict[str, dict] = {}
 
-DEMO_ROLES = {"admin": "admin", "gerente": "gerente", "almacen": "almacenista", "consulta": "consulta"}
+DEMO_ROLES = {"admin": "admin", "encargado": "encargado", "consulta": "consulta"}
 
 
 # --------------------------------------------------------------------------- app
@@ -45,9 +45,9 @@ def app(app_config):
     conn = db.connect()
     try:
         for username, role in DEMO_ROLES.items():
-            users.create(conn, username=username, full_name=f"Usuario {username}", email=f"{username}@test.local",
+            users.create(conn, full_name=f"Usuario {username}", email=f"{username}@test.local",
                          password=PASSWORDS[username], role=role,
-                         receive_alerts=username in ("admin", "gerente"))
+                         receive_alerts=username in ("admin", "encargado"))
     finally:
         conn.close()
     return application
@@ -67,8 +67,8 @@ def conn(db):
 
 @pytest.fixture
 def actor(conn):
-    admin = users.get_by_username(conn, "admin")
-    return {"id": admin["id"], "username": "admin", "ip": "127.0.0.1"}
+    admin = users.get_by_email(conn, "admin@test.local")
+    return {"id": admin["id"], "email": "admin@test.local", "ip": "127.0.0.1"}
 
 
 @pytest.fixture
@@ -77,12 +77,29 @@ def client(app):
 
 
 @pytest.fixture
-def make_product(conn, actor, app):
+def encargado(conn):
+    user = users.get_by_email(conn, "encargado@test.local")
+    return {"id": user["id"], "email": user["email"], "ip": "127.0.0.1"}
+
+
+@pytest.fixture
+def make_category(conn, actor):
+    from stocktrack.models import categories
+
+    def factory(name: str = "Pruebas") -> int:
+        row = conn.one("SELECT id FROM categories WHERE LOWER(name) = LOWER(?)", (name,))
+        return row["id"] if row else categories.create(conn, name, actor)
+    return factory
+
+
+@pytest.fixture
+def make_product(conn, actor, app, make_category):
     """Crea productos rápido: make_product('SKU-1', stock=10, min_stock=3)."""
     def factory(sku: str, *, name: str | None = None, stock_qty: int = 0, min_stock: int = 0,
                 category: str = "Pruebas", cost: str = "100", price: str = "150", **extra) -> int:
         data = products.clean_form({
-            "sku": sku, "name": name or f"Producto {sku}", "category": category, "min_stock": min_stock,
+            "sku": sku, "name": name or f"Producto {sku}", "category_id": str(make_category(category)),
+            "min_stock": min_stock,
             "cost": cost, "price": price, "initial_stock": stock_qty, **extra}, with_initial_stock=True)
         return products.create(conn, data, actor, app.config["MAX_ACTIVE_RECORDS"])
     return factory

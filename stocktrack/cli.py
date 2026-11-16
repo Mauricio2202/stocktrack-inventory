@@ -18,24 +18,23 @@ def register(app) -> None:
         click.echo("Base de datos lista.")
 
     @app.cli.command("create-user")
-    @click.option("--username", prompt=True, help="Usuario (minúsculas, 3-32 caracteres).")
+    @click.option("--email", prompt="Correo", help="Correo: es el identificador de acceso.")
     @click.option("--full-name", prompt="Nombre completo")
-    @click.option("--email", default="", help="Correo (necesario para recibir alertas).")
     @click.option("--role", type=click.Choice(users.ROLES), default="admin", show_default=True)
     @click.option("--receive-alerts/--no-receive-alerts", default=False, help="Recibir alertas por correo.")
     @click.password_option()
-    def create_user(username, full_name, email, role, receive_alerts, password) -> None:
+    def create_user(email, full_name, role, receive_alerts, password) -> None:
         """Crea un usuario (el primer administrador se crea con este comando)."""
         conn = db.connect()
         try:
-            users.create(conn, username=username, full_name=full_name, email=email or None, password=password,
+            users.create(conn, email=email, full_name=full_name, password=password,
                          role=role, receive_alerts=receive_alerts,
                          min_password_length=app.config["PASSWORD_MIN_LENGTH"])
         except AppError as exc:
             raise click.ClickException(f"{exc} {getattr(exc, 'errors', '')}")
         finally:
             conn.close()
-        click.echo(f"Usuario «{username}» creado con rol {role}.")
+        click.echo(f"Usuario «{email}» creado con rol {role}.")
 
     @app.cli.command("seed-demo")
     @click.option("--force", is_flag=True, help="Cargar aunque ya existan productos.")

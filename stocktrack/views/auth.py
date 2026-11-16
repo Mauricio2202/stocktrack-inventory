@@ -1,6 +1,8 @@
 """Inicio y cierre de sesión, cambio de contraseña."""
 from __future__ import annotations
 
+import time
+
 from flask import Blueprint, current_app, flash, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash
 
@@ -21,31 +23,32 @@ def login():
     throttle = current_app.extensions["login_throttle"]
     next_url = safe_next(request.values.get("next"))
     if request.method == "POST":
-        username = (request.form.get("username") or "").strip().lower()[:64]
+        email = users_model.normalize_email(request.form.get("email"))[:120]
         password = request.form.get("password") or ""
         ip = request.remote_addr or "?"
-        user_key, ip_key = f"user:{username}", f"ip:{ip}"
+        user_key, ip_key = f"user:{email}", f"ip:{ip}"
         window, limit = cfg["LOGIN_LOCK_SECONDS"], cfg["LOGIN_MAX_ATTEMPTS"]
         if throttle.is_locked([user_key], limit, window) or throttle.is_locked([ip_key], limit * 4, window):
             flash(f"Demasiados intentos fallidos. Espera {window // 60 or 1} minuto(s) e inténtalo otra vez.", "error")
-            return render_template("login.html", next_url=next_url, username=username), 429
+            return render_template("login.html", next_url=next_url, email=email), 429
         conn = get_db()
-        user = users_model.authenticate(conn, username, password)
+        user = users_model.authenticate(conn, email, password)
         if user:
             throttle.reset([user_key, ip_key])
             session.clear()
             session["uid"] = user["id"]
             session.permanent = True
+            session["last_seen"] = time.time()
             users_model.record_login(conn, user["id"])
             with conn.transaction():
-                audit.log(conn, {"id": user["id"], "username": user["username"], "ip": ip}, "auth.login")
+                audit.log(conn, {"id": user["id"], "email": user["email"], "ip": ip}, "auth.login")
             return redirect(next_url or url_for("dashboard.index"))
         throttle.failure([user_key, ip_key], window)
         with conn.transaction():
-            audit.log(conn, {"id": None, "username": username or None, "ip": ip}, "auth.login_failed")
-        flash("Usuario o contraseña incorrectos.", "error")
-        return render_template("login.html", next_url=next_url, username=username), 401
-    return render_template("login.html", next_url=next_url, username="")
+            audit.log(conn, {"id": None, "email": email or None, "ip": ip}, "auth.login_failed")
+        flash("Correo o contraseña incorrectos.", "error")
+        return render_template("login.html", next_url=next_url, email=email), 401
+    return render_template("login.html", next_url=next_url, email="")
 
 
 @bp.post("/logout")

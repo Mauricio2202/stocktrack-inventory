@@ -12,6 +12,10 @@
     <select name="tipo"><option value="">Todos</option>
       {% for k, label in kinds.items() %}<option value="{{ k }}" {{ 'selected' if k == args.tipo }}>{{ label }}</option>{% endfor %}
     </select></label>
+  <label class="field"><span class="label">Estado</span>
+    <select name="estado"><option value="">Todos</option>
+      {% for k, label in statuses.items() %}<option value="{{ k }}" {{ 'selected' if k == args.estado }}>{{ label }}</option>{% endfor %}
+    </select></label>
   <label class="field"><span class="label">Desde</span><input type="date" name="desde" value="{{ args.desde }}"></label>
   <label class="field"><span class="label">Hasta</span><input type="date" name="hasta" value="{{ args.hasta }}"></label>
   <button class="btn" type="submit">Filtrar</button>
@@ -20,16 +24,16 @@
 <section class="card flush">
   <div class="table-wrap">
   <table class="table">
-    <thead><tr><th>Folio</th><th>Fecha</th><th>Producto</th><th>Tipo</th><th class="num">Cantidad</th><th class="num">Variación</th><th class="num">Stock</th><th>Referencia</th><th>Usuario</th></tr></thead>
+    <thead><tr><th>N.º</th><th>Fecha</th><th>Producto</th><th>Tipo</th><th>Estado</th><th class="num">Cantidad</th><th class="num">Variación</th><th class="num">Stock</th><th>Referencia</th><th>Usuario</th></tr></thead>
     <tbody>
     {% for m in rows %}
       <tr><td class="mono">#{{ m.id }}</td><td>{{ m.created_at|local_dt }}</td>
           <td><a href="{{ url_for('products.detail', product_id=m.product_id) }}">{{ m.product_name }}</a><small class="muted block">{{ m.sku }}</small></td>
-          <td>{{ m.kind|capitalize }}</td><td class="num">{{ m.quantity|num }}</td>
+          <td>{{ kinds[m.kind] }}</td><td><span class="badge {{ {'aplicado': 'badge-ok', 'pendiente': 'badge-warn', 'validado': 'badge-info', 'rechazado': 'badge-bad'}[m.status] }}">{{ statuses[m.status] }}</span>{% if m.validated_by_name %}<small class="muted block">{{ m.validated_by_name }}</small>{% endif %}</td><td class="num">{{ m.quantity|num }}</td>
           <td class="num"><span class="delta {{ 'pos' if m.delta > 0 else 'neg' }}">{{ m.delta|signed }}</span></td>
           <td class="num">{{ m.stock_before|num }} → {{ m.stock_after|num }}</td>
           <td>{{ m.reference or '—' }}</td><td>{{ m.user_name }}</td></tr>
-    {% else %}<tr><td colspan="9" class="empty">No hay movimientos con esos filtros.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="10" class="empty">No hay movimientos con esos filtros.</td></tr>{% endfor %}
     </tbody>
   </table>
   </div>

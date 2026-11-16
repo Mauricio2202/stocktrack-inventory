@@ -1,0 +1,86 @@
+"""Requerimientos del documento «Requerimientos por usuario – StockTrack» (RF-01..34, RNF-01..27)."""
+
+RF = {
+    # Administrador
+    "RF-01": ("Administrador", "Inicio de sesión por correo y contraseña"),
+    "RF-02": ("Administrador", "Dashboard administrativo"),
+    "RF-03": ("Administrador", "Gestión de usuarios (registrar, consultar, modificar, desactivar)"),
+    "RF-04": ("Administrador", "Gestión de roles y permisos"),
+    "RF-05": ("Administrador", "Registro de productos"),
+    "RF-06": ("Administrador", "Modificación de productos"),
+    "RF-07": ("Administrador", "Desactivación de productos"),
+    "RF-08": ("Administrador", "Gestión de categorías"),
+    "RF-09": ("Administrador", "Configuración de stock mínimo"),
+    "RF-10": ("Administrador", "Consulta de inventario"),
+    "RF-11": ("Administrador", "Consulta de movimientos"),
+    "RF-12": ("Administrador", "Supervisión de alertas"),
+    "RF-13": ("Administrador", "Reportes generales de inventario y movimientos (4 tipos de movimiento)"),
+    "RF-14": ("Administrador", "Exportación PDF y Excel, 4 tipos de reporte, foliados e incorruptibles"),
+    "RF-15": ("Administrador", "Historial de actividades"),
+    "RF-16": ("Administrador", "Validación de reservas de stock (segundo nivel)"),
+    # Encargado
+    "RF-17": ("Encargado", "Inicio de sesión"),
+    "RF-18": ("Encargado", "Dashboard de inventario"),
+    "RF-19": ("Encargado", "Consulta de productos"),
+    "RF-20": ("Encargado", "Consulta de existencias"),
+    "RF-21": ("Encargado", "Registro de entradas (Entrada por Compra)"),
+    "RF-22": ("Encargado", "Registro de salidas (Venta, Devolución, Reserva segundo nivel)"),
+    "RF-23": ("Encargado", "Validación de existencias antes de una salida"),
+    "RF-24": ("Encargado", "Actualización automática del inventario"),
+    "RF-25": ("Encargado", "Consulta de movimientos"),
+    "RF-26": ("Encargado", "Consulta de alertas"),
+    "RF-27": ("Encargado", "Atención de alertas"),
+    "RF-28": ("Encargado", "Reportes generales foliados e incorruptibles"),
+    # Consulta
+    "RF-29": ("Consulta", "Inicio de sesión"),
+    "RF-30": ("Consulta", "Dashboard de consulta"),
+    "RF-31": ("Consulta", "Consulta de productos"),
+    "RF-32": ("Consulta", "Búsqueda por nombre, código, marca o categoría"),
+    "RF-33": ("Consulta", "Consulta de categorías"),
+    "RF-34": ("Consulta", "Consulta de existencias"),
+}
+RNF = {
+    "RNF-01": ("Seguridad", "Autenticación por correo y contraseña"),
+    "RNF-02": ("Seguridad", "Contraseñas con hash seguro"),
+    "RNF-03": ("Seguridad", "Control de acceso por rol"),
+    "RNF-04": ("Seguridad", "Cierre de sesión por inactividad configurable"),
+    "RNF-05": ("Seguridad", "Protección contra accesos no autorizados"),
+    "RNF-06": ("Rendimiento", "10 usuarios simultáneos"),
+    "RNF-07": ("Rendimiento", "Consultas en máximo 3 s"),
+    "RNF-08": ("Rendimiento", "Movimientos en máximo 3 s"),
+    "RNF-09": ("Rendimiento", "Reportes en tiempo razonable"),
+    "RNF-10": ("Usabilidad", "Interfaz intuitiva y navegación entre módulos"),
+    "RNF-11": ("Usabilidad", "Textos, etiquetas y mensajes claros"),
+    "RNF-12": ("Usabilidad", "Campos obligatorios indicados y mensajes de error"),
+    "RNF-13": ("Usabilidad", "Uniformidad de colores, botones, menús, tablas y formularios"),
+    "RNF-14": ("Usabilidad", "Adaptación a computadoras, tabletas y móviles"),
+    "RNF-15": ("Confiabilidad", "Sin pérdida ni duplicación de movimientos"),
+    "RNF-16": ("Confiabilidad", "Entradas y salidas mediante transacciones"),
+    "RNF-17": ("Confiabilidad", "Sin actualizaciones parciales ante errores"),
+    "RNF-18": ("Compatibilidad", "Chrome, Edge y Firefox"),
+    "RNF-19": ("Compatibilidad", "Funciones principales en distintas resoluciones"),
+    "RNF-20": ("Mantenibilidad", "Código organizado en módulos"),
+    "RNF-21": ("Mantenibilidad", "Arquitectura que permite agregar funciones sin afectar módulos"),
+    "RNF-22": ("Mantenibilidad", "Base de datos extensible (categorías, productos, usuarios)"),
+    "RNF-23": ("Mantenibilidad", "Preparado para integraciones futuras (ERP)"),
+    "RNF-24": ("Integridad", "Identificador único por producto"),
+    "RNF-25": ("Integridad", "Consistencia entre existencias y movimientos"),
+    "RNF-26": ("Integridad", "Movimientos con usuario, fecha, hora, tipo y cantidad"),
+    "RNF-27": ("Integridad", "Integridad referencial"),
+}
+# Requerimientos que no se prueban con una prueba automatizada: (evidencia, estado)
+MANUAL = {
+    "RNF-10": ("Revisión de diseño: menú lateral por rol; validar con usuarios del cliente", "Por validar con el cliente"),
+    "RNF-13": ("Revisión de diseño: una sola hoja de estilos y macros compartidas (templates/_macros.html)", "Revisión manual"),
+    "RNF-18": ("Automatizado solo en Chromium; Edge (mismo motor) y Firefox no probados en este entorno", "Parcial"),
+    "RNF-20": ("Inspección: paquetes models/, services/, views/, templates/ (docs/arquitectura.md)", "Revisión manual"),
+    "RNF-21": ("Inspección: blueprints independientes y matriz de permisos única (security.py)", "Revisión manual"),
+    "RNF-23": ("Preparado, no implementado: capa de modelos/servicios separada; no hay API ni conector ERP", "No implementado"),
+}
+
+# Cubiertos por pruebas unitarias/seguridad fuera de la matriz de aceptación: id -> prueba
+UNIT = {
+    "RNF-02": "tests/test_models.py::TestUsers::test_passwords_are_hashed (PBKDF2-SHA256 con sal)",
+    "RNF-05": "tests/test_security.py (CSRF, bloqueo por intentos, redirecciones abiertas, XSS, inyección SQL, cabeceras)",
+    "RNF-01": "tests/test_security.py + RU-A.1 (login solo por correo)",
+}

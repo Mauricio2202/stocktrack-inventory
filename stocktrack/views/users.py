@@ -1,4 +1,4 @@
-"""Administración de usuarios y roles (solo administradores)."""
+"""Administración de usuarios y roles: alta, consulta, modificación y desactivación (RF-03, RF-04)."""
 from __future__ import annotations
 
 import secrets
@@ -26,13 +26,13 @@ def index():
 @bp.route("/nuevo", methods=["GET", "POST"])
 @permission_required("users.manage")
 def create():
-    values = {"role": "almacenista"}
+    values = {"role": "encargado"}
     errors: dict[str, str] = {}
     if request.method == "POST":
         values = request.form.to_dict()
         try:
-            users.create(get_db(), username=values.get("username", ""), full_name=values.get("full_name", ""),
-                         email=values.get("email"), password=values.get("password", ""),
+            users.create(get_db(), email=values.get("email", ""), full_name=values.get("full_name", ""),
+                         password=values.get("password", ""),
                          role=values.get("role", ""), receive_alerts=values.get("receive_alerts") == "1",
                          must_change_password=values.get("must_change") == "1",
                          min_password_length=current_app.config["PASSWORD_MIN_LENGTH"], actor=actor())
@@ -101,6 +101,6 @@ def reset_password(user_id: int):
     temp = _temp_password()
     users.set_password(conn, user_id, temp, must_change=True,
                        min_length=current_app.config["PASSWORD_MIN_LENGTH"], actor=actor())
-    flash(f"Contraseña temporal para {user['username']}: {temp} (deberá cambiarla al entrar; "
+    flash(f"Contraseña temporal para {user['email']}: {temp} (deberá cambiarla al entrar; "
           "compártela por un canal seguro).", "success")
     return redirect(url_for("users.index"))

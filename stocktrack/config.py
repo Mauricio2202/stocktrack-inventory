@@ -42,6 +42,8 @@ def load_config() -> dict:
         "PAGE_SIZE": _int("PAGE_SIZE", 25),
         # Sesiones y seguridad
         "PERMANENT_SESSION_LIFETIME": timedelta(hours=_int("SESSION_HOURS", 8)),
+        # RNF-04: cierre de sesión por inactividad, configurable (minutos; 0 = desactivado)
+        "SESSION_IDLE_MINUTES": _int("SESSION_IDLE_MINUTES", 30),
         "SESSION_COOKIE_HTTPONLY": True,
         "SESSION_COOKIE_SAMESITE": "Lax",
         "SESSION_COOKIE_SECURE": _bool(os.environ.get("SESSION_COOKIE_SECURE"), env == "production"),

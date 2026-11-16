@@ -10,30 +10,50 @@ from stocktrack.errors import LimitExceeded
 from stocktrack.models import products
 from tests.helpers.web import csrf, login, post
 
-ROLES = ["admin", "gerente", "almacen", "consulta"]
+ROLES = ["admin", "encargado", "consulta"]
+ALL = dict.fromkeys(ROLES, 200)
 
-# (método, ruta, {rol: estado esperado})
+
+def only(*allowed, ok=200, no=403):
+    return {role: (ok if role in allowed else no) for role in ROLES}
+
+
+# (método, ruta, {rol: estado esperado}) — requerimientos por usuario
 MATRIX = [
-    ("GET", "/", dict.fromkeys(ROLES, 200)),
-    ("GET", "/productos", dict.fromkeys(ROLES, 200)),
-    ("GET", "/movimientos", dict.fromkeys(ROLES, 200)),
-    ("GET", "/alertas", dict.fromkeys(ROLES, 200)),
-    ("GET", "/reportes", dict.fromkeys(ROLES, 200)),
-    ("GET", "/reportes/inventario.xlsx", dict.fromkeys(ROLES, 200)),
-    ("GET", "/productos/nuevo", {"admin": 200, "gerente": 200, "almacen": 403, "consulta": 403}),
-    ("GET", "/productos/1/editar", {"admin": 200, "gerente": 200, "almacen": 403, "consulta": 403}),
-    ("GET", "/movimientos/nuevo", {"admin": 200, "gerente": 200, "almacen": 200, "consulta": 403}),
-    ("GET", "/auditoria", {"admin": 200, "gerente": 200, "almacen": 403, "consulta": 403}),
-    ("GET", "/usuarios", {"admin": 200, "gerente": 403, "almacen": 403, "consulta": 403}),
-    ("GET", "/usuarios/nuevo", {"admin": 200, "gerente": 403, "almacen": 403, "consulta": 403}),
+    ("GET", "/", ALL),                                                 # RF-02, RF-18, RF-30: cada rol su panel
+    ("GET", "/productos", ALL),                                        # RF-05, RF-19, RF-31
+    ("GET", "/productos/1", ALL),
+    ("GET", "/productos?q=ROL", ALL),                                  # RF-32
+    ("GET", "/categorias", ALL),                                       # RF-33
+    ("GET", "/movimientos", only("admin", "encargado")),               # RF-10, RF-23
+    ("GET", "/alertas", only("admin", "encargado")),                   # RF-11, RF-24
+    ("GET", "/reportes", only("admin", "encargado")),                  # RF-12, RF-27
+    ("GET", "/reportes/inventario.xlsx", only("admin", "encargado")),
+    ("GET", "/reportes/inventario.pdf", only("admin", "encargado")),
+    ("GET", "/reportes/movimientos.pdf", only("admin", "encargado")),
+    ("GET", "/reportes/especial/diario.pdf?dia=2026-01-01", only("admin")),        # RF-13
+    ("GET", "/reportes/especial/mensual.xlsx?mes=2026-01", only("admin")),
+    ("GET", "/reportes/especial/reservas.pdf", only("admin")),
+    ("GET", "/reportes/especial/devoluciones.xlsx", only("admin")),
+    ("GET", "/reportes/verificar", only("admin", "encargado")),
+    ("GET", "/productos/nuevo", only("admin")),                        # RF-06
+    ("GET", "/productos/1/editar", only("admin")),                     # RF-07, RF-09
+    ("GET", "/movimientos/nuevo", only("encargado")),                  # RF-20..22
+    ("GET", "/movimientos/reservas", only("admin")),                   # RF-16
+    ("GET", "/auditoria", only("admin")),                              # RF-15
+    ("GET", "/usuarios", only("admin")),                               # RF-03
+    ("GET", "/usuarios/nuevo", only("admin")),
 ]
 FORBIDDEN_WRITES = [  # escrituras que cada rol NO debe poder hacer
-    ("/productos/1/archivar", {"almacen", "consulta"}),
-    ("/productos/nuevo", {"almacen", "consulta"}),
-    ("/movimientos/nuevo", {"consulta"}),
-    ("/alertas/1/reconocer", {"consulta"}),
-    ("/usuarios/nuevo", {"gerente", "almacen", "consulta"}),
-    ("/usuarios/1/estado", {"gerente", "almacen", "consulta"}),
+    ("/productos/1/desactivar", {"encargado", "consulta"}),
+    ("/productos/nuevo", {"encargado", "consulta"}),
+    ("/categorias", {"encargado", "consulta"}),
+    ("/categorias/1/estado", {"encargado", "consulta"}),
+    ("/movimientos/nuevo", {"admin", "consulta"}),
+    ("/movimientos/1/validar", {"encargado", "consulta"}),
+    ("/alertas/1/atender", {"admin", "consulta"}),
+    ("/usuarios/nuevo", {"encargado", "consulta"}),
+    ("/usuarios/1/estado", {"encargado", "consulta"}),
 ]
 
 
@@ -50,7 +70,7 @@ def test_role_permission_matrix(app, make_product, metrics):
             checks += 1
         for path, denied in FORBIDDEN_WRITES:
             if role in denied:
-                assert post(client, path, sku="X", kind="entrada", quantity="1").status_code == 403, (role, path)
+                assert post(client, path, sku="X", kind="compra", quantity="1").status_code == 403, (role, path)
                 checks += 1
     anonymous = app.test_client()
     for _, path, _ in MATRIX:
@@ -71,9 +91,9 @@ def test_active_record_cap_is_enforced(app, make_product, conn, actor, metrics):
     response = post(admin, "/productos/nuevo", **form)
     assert response.status_code == 409 and "capacidad máxima de 3" in response.get_data(as_text=True)
     assert products.count_active(conn) == 3
-    post(admin, f"/productos/{ids[0]}/archivar")                                 # archivar libera un lugar
+    post(admin, f"/productos/{ids[0]}/desactivar")                               # desactivar libera un lugar
     assert post(admin, "/productos/nuevo", **form).status_code == 302
-    restored = admin.post(f"/productos/{ids[0]}/restaurar", data={"csrf_token": csrf(admin)}, follow_redirects=True)
+    restored = admin.post(f"/productos/{ids[0]}/activar", data={"csrf_token": csrf(admin)}, follow_redirects=True)
     assert "capacidad máxima de 3" in restored.get_data(as_text=True)            # restaurar con el catálogo lleno
     assert products.get(conn, ids[0])["is_active"] == 0                          # ...no se permite
     # Condición de carrera: 10 altas simultáneas con 2 lugares libres => exactamente 2 entran.
@@ -106,12 +126,16 @@ def test_active_record_cap_is_enforced(app, make_product, conn, actor, metrics):
 @pytest.mark.acceptance("RN-02.2")
 def test_performance_with_100k_active_records(app, conn, actor, metrics):
     total = 100_000
-    rows = [(f"BULK-{n:06d}", f"Producto de volumen {n}", f"Categoría {n % 20:02d}", f"Marca {n % 50}",
+    with conn.transaction():
+        conn.executemany("INSERT INTO categories (name, is_active, created_at) VALUES (?, 1, ?)",
+                         [(f"Categoría {n:02d}", "2026-01-01 00:00:00") for n in range(20)])
+    cat_ids = [r["id"] for r in conn.all("SELECT id FROM categories ORDER BY name")]
+    rows = [(f"BULK-{n:06d}", f"Producto de volumen {n}", cat_ids[n % 20], f"Marca {n % 50}",
              (n * 7) % 40, 8 if n % 100 == 0 else 5, 15_000, 22_000, "2026-01-01 00:00:00", "2026-01-01 00:00:00")
             for n in range(1, total + 1)]
     started = time.perf_counter()
     with conn.transaction():
-        conn.executemany("INSERT INTO products (sku, name, category, brand, stock, min_stock, cost_cents, price_cents, "
+        conn.executemany("INSERT INTO products (sku, name, category_id, brand, stock, min_stock, cost_cents, price_cents, "
                          "is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)", rows)
     load_s = time.perf_counter() - started
     assert products.count_active(conn) == total
@@ -133,7 +157,7 @@ def test_performance_with_100k_active_records(app, conn, actor, metrics):
     assert timed("listado_ms", "/productos").status_code == 200
     assert timed("pagina_ultima_ms", "/productos?page=4000").status_code == 200
     assert timed("busqueda_ms", "/productos?q=volumen+99999").status_code == 200
-    assert timed("filtro_categoria_ms", "/productos?categoria=Categor%C3%ADa+07&orden=stock&dir=desc").status_code == 200
+    assert timed("filtro_categoria_ms", f"/productos?categoria={cat_ids[7]}&orden=stock&dir=desc").status_code == 200
     assert timed("escasez_ms", "/productos?escasez=1").status_code == 200
 
     start = time.perf_counter()
@@ -150,7 +174,7 @@ def test_performance_with_100k_active_records(app, conn, actor, metrics):
 
     blocked = admin.get("/reportes/inventario.pdf", follow_redirects=True)
     assert "descarga la versión en Excel" in blocked.get_data(as_text=True)
-    low = admin.get("/reportes/inventario.pdf?escasez=1&categoria=Categor%C3%ADa+00")   # filtrado: sí cabe en PDF
+    low = admin.get(f"/reportes/inventario.pdf?escasez=1&categoria={cat_ids[0]}")   # filtrado: sí cabe en PDF
     assert low.status_code == 200 and low.data.startswith(b"%PDF-")
 
     metrics.update({"registros_activos": total, "carga_masiva_s": round(load_s, 2), **timings,

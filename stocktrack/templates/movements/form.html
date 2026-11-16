@@ -5,12 +5,13 @@
 {% block content %}
 <form class="card form narrow" method="post" novalidate>
   {{ csrf() }}
+  <input type="hidden" name="request_key" value="{{ values.request_key }}">
   <label class="field {{ 'has-error' if errors.get('sku') }}"><span class="label">Producto (SKU) <em>*</em></span>
     <input name="sku" id="sku-input" value="{{ values.sku }}" list="sku-suggestions" autocomplete="off" required
            data-suggest-url="{{ url_for('products.suggestions') }}">
     <datalist id="sku-suggestions"></datalist>
     {% if errors.get('sku') %}<span class="err">{{ errors.sku }}</span>
-    {% elif product %}<span class="hint">{{ product.name }} · stock actual: <strong>{{ product.stock|num }}</strong> · mínimo {{ product.min_stock|num }}</span>
+    {% elif product %}<span class="hint">{{ product.name }} · stock: <strong>{{ product.stock|num }}</strong> · reservado {{ product.reserved|num }} · disponible <strong>{{ product.available|num }}</strong> · mínimo {{ product.min_stock|num }}</span>
     {% else %}<span class="hint">Escribe al menos 2 letras del SKU, nombre o marca.</span>{% endif %}
   </label>
   <div class="form-grid">
@@ -18,13 +19,13 @@
       <select name="kind" required>
         {% for k, label in kinds.items() %}<option value="{{ k }}" {{ 'selected' if k == values.kind }}>{{ label }}</option>{% endfor %}
       </select>
-      <span class="hint">Entrada suma · Salida resta · Ajuste fija el stock al conteo físico</span></label>
+      <span class="hint">Compra suma · Venta y Devolución restan · Reserva (segundo nivel) retiene unidades hasta que el administrador la valide</span></label>
     <label class="field {{ 'has-error' if errors.get('quantity') }}"><span class="label">Cantidad <em>*</em></span>
-      <input type="number" name="quantity" min="0" step="1" value="{{ values.quantity }}" required>
+      <input type="number" name="quantity" min="1" step="1" value="{{ values.quantity }}" required>
       {% if errors.get('quantity') %}<span class="err">{{ errors.quantity }}</span>{% endif %}</label>
   </div>
   <label class="field"><span class="label">Referencia</span>
-    <input name="reference" value="{{ values.reference }}" maxlength="60" placeholder="Folio de venta, orden de compra…"></label>
+    <input name="reference" value="{{ values.reference }}" maxlength="60" placeholder="Folio de venta, orden de compra, cliente…"></label>
   <label class="field"><span class="label">Notas</span>
     <textarea name="notes" rows="2" maxlength="300">{{ values.notes }}</textarea></label>
   <div class="form-actions">

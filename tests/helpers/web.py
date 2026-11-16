@@ -5,7 +5,11 @@ import re
 
 CSRF_RE = re.compile(r'name="csrf_token" value="([^"]+)"')
 
-PASSWORDS = {"admin": "Admin12345", "gerente": "Gerente12345", "almacen": "Almacen12345", "consulta": "Consulta12345"}
+PASSWORDS = {"admin": "Admin12345", "encargado": "Encargado12345", "consulta": "Consulta12345"}
+
+
+def email_of(key: str) -> str:
+    return key if "@" in key else f"{key}@test.local"
 
 
 def token_from(html: str) -> str:
@@ -18,7 +22,7 @@ def login(client, username: str = "admin", password: str | None = None):
     """Inicia sesión con un cliente de Flask y devuelve la respuesta."""
     password = password or PASSWORDS.get(username, "x")
     token = token_from(client.get("/login").get_data(as_text=True))
-    return client.post("/login", data={"username": username, "password": password, "csrf_token": token})
+    return client.post("/login", data={"email": email_of(username), "password": password, "csrf_token": token})
 
 
 def csrf(client) -> str:

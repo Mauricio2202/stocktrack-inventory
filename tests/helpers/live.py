@@ -9,7 +9,7 @@ from contextlib import contextmanager
 import requests
 from werkzeug.serving import make_server
 
-from .web import CSRF_RE
+from .web import CSRF_RE, email_of
 
 
 class LiveServer:
@@ -54,7 +54,7 @@ class User:
             return False
         token = CSRF_RE.search(page.text).group(1)
         response = self.request("login", "POST", "/login", data={
-            "username": self.username, "password": self.password, "csrf_token": token})
+            "email": email_of(self.username), "password": self.password, "csrf_token": token})
         ok = response is not None and response.status_code == 302
         if ok:
             self.refresh_token()

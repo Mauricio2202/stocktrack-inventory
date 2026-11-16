@@ -1,15 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Reportes{% endblock %}
 {% block heading %}Reportes{% endblock %}
+{% block actions %}<a class="btn" href="{{ url_for('reports.verify') }}">Verificar un reporte</a>{% endblock %}
 {% block content %}
+<p class="muted">Todos los reportes salen <strong>foliados</strong> (folio consecutivo en cada página y en el nombre del archivo) y con huella SHA-256 registrada: puedes comprobar después que un archivo no fue alterado.</p>
 <div class="grid-2">
   <section class="card">
-    <header class="card-head"><h2>Inventario actual</h2></header>
-    <p class="muted">Existencias, estado de stock y valor del inventario a costo y a precio de venta.</p>
+    <header class="card-head"><h2>Inventario general</h2></header>
+    <p class="muted">Existencias, reservas, disponibilidad, estado de stock y valor del inventario.</p>
     <form method="get" class="report-form" id="inventory-report">
       <label class="field"><span class="label">Categoría</span>
         <select name="categoria"><option value="">Todas</option>
-          {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select></label>
+          {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></label>
       <label class="check"><input type="checkbox" name="escasez" value="1"> Solo productos en escasez</label>
       <div class="form-actions">
         <button class="btn btn-primary" type="submit" formaction="{{ url_for('reports.inventory', fmt='pdf') }}">Descargar PDF</button>
@@ -20,7 +22,7 @@
 
   <section class="card">
     <header class="card-head"><h2>Movimientos de inventario</h2></header>
-    <p class="muted">Entradas, salidas y ajustes de un periodo, con usuario y referencia.</p>
+    <p class="muted">Compras, ventas, devoluciones y reservas de un periodo, con usuario y estado.</p>
     <form method="get" class="report-form" id="movements-report">
       <div class="form-grid">
         <label class="field"><span class="label">Desde</span><input type="date" name="desde" value="{{ default_from }}"></label>
@@ -36,6 +38,61 @@
     </form>
   </section>
 </div>
-<p class="muted">Los PDF admiten hasta {{ config.REPORT_PDF_MAX_ROWS|num }} filas; para volúmenes mayores usa el Excel o aplica filtros.
-  Cada descarga queda registrada en la bitácora de auditoría.</p>
+
+{% if can('reports.admin') %}
+<div class="grid-2">
+  <section class="card">
+    <header class="card-head"><h2>{{ special.diario }}</h2></header>
+    <form method="get" class="report-form" id="daily-report">
+      <label class="field"><span class="label">Día</span><input type="date" name="dia" value="{{ today }}" required></label>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit" formaction="{{ url_for('reports.special', name='diario', fmt='pdf') }}">PDF</button>
+        <button class="btn" type="submit" formaction="{{ url_for('reports.special', name='diario', fmt='xlsx') }}">Excel</button>
+      </div>
+    </form>
+  </section>
+  <section class="card">
+    <header class="card-head"><h2>{{ special.mensual }}</h2></header>
+    <form method="get" class="report-form" id="monthly-report">
+      <label class="field"><span class="label">Mes</span><input type="month" name="mes" value="{{ this_month }}" required></label>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit" formaction="{{ url_for('reports.special', name='mensual', fmt='pdf') }}">PDF</button>
+        <button class="btn" type="submit" formaction="{{ url_for('reports.special', name='mensual', fmt='xlsx') }}">Excel</button>
+      </div>
+    </form>
+  </section>
+  {% for key in ('reservas', 'devoluciones') %}
+  <section class="card">
+    <header class="card-head"><h2>{{ special[key] }}</h2></header>
+    <form method="get" class="report-form" id="{{ key }}-report">
+      <div class="form-grid">
+        <label class="field"><span class="label">Desde</span><input type="date" name="desde" value="{{ default_from }}"></label>
+        <label class="field"><span class="label">Hasta</span><input type="date" name="hasta" value="{{ default_to }}"></label>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit" formaction="{{ url_for('reports.special', name=key, fmt='pdf') }}">PDF</button>
+        <button class="btn" type="submit" formaction="{{ url_for('reports.special', name=key, fmt='xlsx') }}">Excel</button>
+      </div>
+    </form>
+  </section>
+  {% endfor %}
+</div>
+{% endif %}
+
+<section class="card flush">
+  <header class="card-head pad"><h2>Reportes emitidos recientemente</h2></header>
+  <div class="table-wrap">
+  <table class="table compact">
+    <thead><tr><th>Folio</th><th>Reporte</th><th>Formato</th><th class="num">Filas</th><th>Generó</th><th>Fecha</th><th>Huella SHA-256</th></tr></thead>
+    <tbody>
+    {% for r in recent %}
+      <tr><td class="mono">{{ r.folio }}</td><td>{{ r.title }}</td><td>{{ r.format|upper }}</td><td class="num">{{ r.row_count|num if r.row_count is not none else '—' }}</td>
+          <td>{{ r.generated_by_name or '—' }}</td><td>{{ r.generated_at|local_dt }}</td>
+          <td class="mono">{{ r.sha256[:16] ~ '…' if r.sha256 else r.status }}</td></tr>
+    {% else %}<tr><td colspan="7" class="empty">Aún no se han emitido reportes.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+<p class="muted">Los PDF admiten hasta {{ config.REPORT_PDF_MAX_ROWS|num }} filas; para volúmenes mayores usa el Excel o aplica filtros.</p>
 {% endblock %}

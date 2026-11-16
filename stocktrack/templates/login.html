@@ -3,15 +3,15 @@
 {% block auth %}
 {% from "_macros.html" import csrf %}
 <section class="auth-card">
-  <img class="auth-logo" src="{{ url_for('static', filename='img/logo.svg') }}" alt="StockTrack · Control total de inventarios" width="320" height="80">
+  <img class="auth-logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="StockTrack · Control total de inventarios" width="320" height="89">
   <h1>Iniciar sesión</h1>
-  <p class="muted">Accede con tu usuario de StockTrack.</p>
+  <p class="muted">Accede con tu correo electrónico y contraseña.</p>
   <form method="post" action="{{ url_for('auth.login') }}" autocomplete="on">
     {{ csrf() }}
     {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
-    <label class="field"><span class="label">Usuario</span>
-      <input name="username" value="{{ username }}" autocomplete="username" required autofocus></label>
-    <label class="field"><span class="label">Contraseña</span>
+    <label class="field"><span class="label">Correo electrónico <em>*</em></span>
+      <input type="email" name="email" value="{{ email }}" autocomplete="username" required autofocus maxlength="120"></label>
+    <label class="field"><span class="label">Contraseña <em>*</em></span>
       <input type="password" name="password" autocomplete="current-password" required></label>
     <button class="btn btn-primary btn-block" type="submit">Entrar</button>
   </form>

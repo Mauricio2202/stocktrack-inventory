@@ -10,10 +10,10 @@ from tests.helpers.web import PASSWORDS, login, post, token_from
 def test_csrf_required_on_posts(app, make_product):
     make_product("CSR-1", stock_qty=5)
     client = app.test_client()
-    login(client, "almacen")
-    response = client.post("/movimientos/nuevo", data={"sku": "CSR-1", "kind": "salida", "quantity": "1"})
+    login(client, "encargado")
+    response = client.post("/movimientos/nuevo", data={"sku": "CSR-1", "kind": "venta", "quantity": "1"})
     assert response.status_code == 400
-    wrong = client.post("/movimientos/nuevo", data={"sku": "CSR-1", "kind": "salida", "quantity": "1",
+    wrong = client.post("/movimientos/nuevo", data={"sku": "CSR-1", "kind": "venta", "quantity": "1",
                                                      "csrf_token": "falso"})
     assert wrong.status_code == 400
     assert client.post("/logout", data={}).status_code == 400            # cerrar sesión también exige token
@@ -25,7 +25,7 @@ def test_login_lockout_after_repeated_failures(app):
         assert login(client, "admin", "incorrecta").status_code == 401
     assert login(client, "admin", PASSWORDS["admin"]).status_code == 429   # bloqueado aunque la clave sea correcta
     other = app.test_client()                                               # otro usuario, misma IP (límite mayor)
-    assert login(other, "gerente").status_code == 302
+    assert login(other, "encargado").status_code == 302
 
 
 def test_login_failures_are_audited(app, conn):
@@ -40,7 +40,7 @@ def test_login_failures_are_audited(app, conn):
 def test_open_redirect_is_blocked(app, target):
     client = app.test_client()
     token = token_from(client.get("/login").get_data(as_text=True))
-    response = client.post("/login", data={"username": "admin", "password": PASSWORDS["admin"],
+    response = client.post("/login", data={"email": "admin@test.local", "password": PASSWORDS["admin"],
                                            "csrf_token": token, "next": target})
     assert response.status_code == 302 and response.headers["Location"] == "/"
 
@@ -48,7 +48,7 @@ def test_open_redirect_is_blocked(app, target):
 def test_internal_next_is_honored(app):
     client = app.test_client()
     token = token_from(client.get("/login?next=/alertas").get_data(as_text=True))
-    response = client.post("/login", data={"username": "admin", "password": PASSWORDS["admin"],
+    response = client.post("/login", data={"email": "admin@test.local", "password": PASSWORDS["admin"],
                                            "csrf_token": token, "next": "/alertas"})
     assert response.headers["Location"] == "/alertas"
 
@@ -84,10 +84,10 @@ def test_security_headers(client):
 
 
 def test_forced_password_change_flow(app, conn):
-    user = users.get_by_username(conn, "almacen")
+    user = users.get_by_email(conn, "encargado@test.local")
     users.set_password(conn, user["id"], "Temporal123", must_change=True)
     client = app.test_client()
-    login(client, "almacen", "Temporal123")
+    login(client, "encargado", "Temporal123")
     response = client.get("/productos")
     assert response.status_code == 302 and "/cuenta/password" in response.headers["Location"]
     bad = post(client, "/cuenta/password", current_password="Temporal123", new_password="corta",
@@ -103,21 +103,21 @@ def test_deactivated_user_loses_session(app, conn):
     client = app.test_client()
     login(client, "consulta")
     assert client.get("/productos").status_code == 200
-    users.set_active(conn, users.get_by_username(conn, "consulta")["id"], False)
+    users.set_active(conn, users.get_by_email(conn, "consulta@test.local")["id"], False)
     assert client.get("/productos").status_code == 302
 
 
 def test_admin_user_management_and_audit(app, conn):
     admin = app.test_client()
     login(admin, "admin")
-    created = post(admin, "/usuarios/nuevo", username="nuevo.user", full_name="Nuevo Usuario", email="n@x.com",
-                   role="almacenista", password="Inicial123", must_change="1", receive_alerts="1")
+    created = post(admin, "/usuarios/nuevo", full_name="Nuevo Usuario", email="n@x.com",
+                   role="encargado", password="Inicial123", must_change="1", receive_alerts="1")
     assert created.status_code == 302
-    assert users.get_by_username(conn, "nuevo.user")["role"] == "almacenista"
-    dup = post(admin, "/usuarios/nuevo", username="nuevo.user", full_name="Otro", email="", role="consulta",
+    assert users.get_by_email(conn, "n@x.com")["role"] == "encargado"
+    dup = post(admin, "/usuarios/nuevo", full_name="Otro", email="N@X.com", role="consulta",
                password="Inicial123")
-    assert dup.status_code == 422
-    assert conn.scalar("SELECT COUNT(*) FROM audit_log WHERE action = 'user.create'") >= 5   # 4 de fixture + 1 nuevo
+    assert dup.status_code == 422                                   # correo duplicado (sin distinguir mayúsculas)
+    assert conn.scalar("SELECT COUNT(*) FROM audit_log WHERE action = 'user.create'") >= 4   # 3 de fixture + 1 nuevo
 
 
 def test_health_endpoint(client):

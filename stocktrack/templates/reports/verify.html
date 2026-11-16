@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf %}
+{% block title %}Verificar reporte{% endblock %}
+{% block heading %}Verificar autenticidad de un reporte{% endblock %}
+{% block content %}
+<form class="card form narrow" method="post" enctype="multipart/form-data">
+  {{ csrf() }}
+  <p class="muted">Sube el PDF o Excel que quieres comprobar. Se calcula su huella SHA-256 y se compara con la registrada al emitirlo; si el archivo cambió aunque sea un carácter, no coincidirá.</p>
+  <label class="field"><span class="label">Archivo del reporte (.pdf o .xlsx) <em>*</em></span>
+    <input type="file" name="file" accept=".pdf,.xlsx" required></label>
+  <div class="form-actions"><button class="btn btn-primary" type="submit">Verificar</button>
+    <a class="btn btn-ghost" href="{{ url_for('reports.index') }}">Volver</a></div>
+</form>
+{% if result %}
+<section class="card" id="verify-result">
+  {% if result.ok %}
+  <h2><span class="badge badge-ok">AUTÉNTICO</span> Coincide con el reporte original</h2>
+  <dl class="facts">
+    <div><dt>Folio</dt><dd class="mono">{{ result.report.folio }}</dd></div>
+    <div><dt>Reporte</dt><dd>{{ result.report.title }} ({{ result.report.format|upper }})</dd></div>
+    <div><dt>Emitido</dt><dd>{{ result.report.generated_at|local_dt }} por {{ result.report.generated_by_name or '—' }}</dd></div>
+    <div><dt>Filas</dt><dd>{{ result.report.row_count|num }}</dd></div>
+    <div><dt>SHA-256</dt><dd class="mono">{{ result.report.sha256 }}</dd></div>
+  </dl>
+  {% else %}
+  <h2><span class="badge badge-bad">NO COINCIDE</span> El archivo no corresponde a ningún reporte emitido</h2>
+  <p class="muted">Puede haber sido modificado después de emitirse, o no haber sido generado por este sistema.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

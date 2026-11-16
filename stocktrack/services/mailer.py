@@ -22,7 +22,7 @@ def build_message(ctx: dict, recipients: list[str], config: dict) -> EmailMessag
         f"SKU:            {ctx['sku']}\n"
         f"Categoría:      {ctx.get('category') or '-'}\n"
         f"Ubicación:      {ctx.get('location') or '-'}\n"
-        f"Stock actual:   {ctx['stock']} unidades\n"
+        f"Stock disponible: {ctx['available']} unidades (físico {ctx['stock']}, reservado {ctx['reserved']})\n"
         f"Stock mínimo:   {ctx['min_stock']} unidades\n"
         f"Detectada:      {created}\n\n"
         "Acción sugerida: generar la orden de reposición con el proveedor.\n"
@@ -37,7 +37,7 @@ def build_message(ctx: dict, recipients: list[str], config: dict) -> EmailMessag
 <tr><td><b>SKU</b></td><td>{_esc(ctx['sku'])}</td></tr>
 <tr><td><b>Categoría</b></td><td>{_esc(ctx.get('category') or '-')}</td></tr>
 <tr><td><b>Ubicación</b></td><td>{_esc(ctx.get('location') or '-')}</td></tr>
-<tr><td><b>Stock actual</b></td><td style="color:#b91c1c"><b>{ctx['stock']}</b> unidades</td></tr>
+<tr><td><b>Stock disponible</b></td><td style="color:#b91c1c"><b>{ctx['available']}</b> unidades (físico {ctx['stock']}, reservado {ctx['reserved']})</td></tr>
 <tr><td><b>Stock mínimo</b></td><td>{ctx['min_stock']} unidades</td></tr>
 <tr><td><b>Detectada</b></td><td>{created}</td></tr>
 </table>

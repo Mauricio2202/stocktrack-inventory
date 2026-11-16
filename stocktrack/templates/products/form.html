@@ -7,18 +7,19 @@
 <form class="card form" method="post" novalidate>
   {{ csrf() }}
   <div class="form-grid">
-    {{ field('sku', 'SKU', values, errors, required=True, hint='Código único, p. ej. SMA-SAM-001', attrs='maxlength="40" autocomplete="off"') }}
+    {{ field('sku', 'SKU', values, errors, required=True, hint='Código único del producto, p. ej. SMA-SAM-001', attrs='maxlength="40" autocomplete="off"') }}
     {{ field('name', 'Nombre del producto', values, errors, required=True, attrs='maxlength="120"') }}
-    <label class="field {{ 'has-error' if errors.get('category') }}"><span class="label">Categoría</span>
-      <input name="category" value="{{ values.get('category', '') }}" list="category-list" maxlength="60" autocomplete="off">
-      <datalist id="category-list">{% for c in categories %}<option value="{{ c }}">{% endfor %}</datalist></label>
+    <label class="field {{ 'has-error' if errors.get('category_id') }}"><span class="label">Categoría</span>
+      <select name="category_id"><option value="">Sin categoría</option>
+        {% for c in categories %}<option value="{{ c.id }}" {{ 'selected' if c.id|string == values.get('category_id')|string }}>{{ c.name }}</option>{% endfor %}</select>
+      {% if errors.get('category_id') %}<span class="err">{{ errors.category_id }}</span>{% else %}<span class="hint">Las categorías se administran en el menú Categorías</span>{% endif %}</label>
     {{ field('brand', 'Marca', values, errors, attrs='maxlength="60"') }}
     {{ field('location', 'Ubicación en almacén', values, errors, hint='Pasillo / anaquel, p. ej. A01-2', attrs='maxlength="60"') }}
     {{ field('min_stock', 'Stock mínimo (umbral de alerta)', values, errors, type='number', hint='0 = sin alerta de escasez', attrs='min="0" step="1"') }}
     {{ field('cost', 'Costo unitario (MXN)', values, errors, type='number', attrs='min="0" step="0.01"') }}
     {{ field('price', 'Precio de venta (MXN)', values, errors, type='number', attrs='min="0" step="0.01"') }}
     {% if not editing %}
-    {{ field('initial_stock', 'Stock inicial', values, errors, type='number', hint='Se registra como una entrada «Stock inicial»', attrs='min="0" step="1"') }}
+    {{ field('initial_stock', 'Stock inicial', values, errors, type='number', hint='Se registra como una Entrada por Compra «Stock inicial»', attrs='min="0" step="1"') }}
     {% endif %}
   </div>
   <label class="field {{ 'has-error' if errors.get('description') }}"><span class="label">Descripción</span>

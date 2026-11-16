@@ -24,7 +24,7 @@ def close_db(exc=None) -> None:
 def actor() -> dict:
     user = g.get("user")
     return {"id": user["id"] if user else None,
-            "username": user["username"] if user else None,
+            "email": user["email"] if user else None,
             "ip": request.remote_addr}
 
 

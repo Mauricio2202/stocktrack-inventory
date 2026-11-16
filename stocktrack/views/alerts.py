@@ -25,12 +25,12 @@ def index():
                            notifications=alerts.list_notifications(conn, g.user["id"]))
 
 
-@bp.post("/alertas/<int:alert_id>/reconocer")
-@permission_required("alerts.ack")
-def acknowledge(alert_id: int):
+@bp.post("/alertas/<int:alert_id>/atender")
+@permission_required("alerts.attend")
+def attend(alert_id: int):
     try:
-        alerts.acknowledge(get_db(), alert_id, actor())
-        flash("Alerta reconocida. Seguirá vigente hasta que se reponga el stock.", "success")
+        alerts.mark_attended(get_db(), alert_id, actor())
+        flash("Alerta marcada como atendida. Se resolverá sola cuando se reponga el stock.", "success")
     except NotFound as exc:
         flash(str(exc), "error")
     return redirect(request.referrer or url_for("alerts.index"))

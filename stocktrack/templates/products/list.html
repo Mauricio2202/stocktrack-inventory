@@ -8,15 +8,15 @@
 {% block content %}
 <form class="filters card" method="get" action="{{ url_for('products.index') }}">
   <label class="field grow"><span class="label">Buscar</span>
-    <input type="search" name="q" value="{{ args.q }}" placeholder="SKU, nombre o marca"></label>
+    <input type="search" name="q" value="{{ args.q }}" placeholder="Nombre, código, marca o categoría"></label>
   <label class="field"><span class="label">Categoría</span>
     <select name="categoria"><option value="">Todas</option>
-      {% for c in categories %}<option value="{{ c }}" {{ 'selected' if c == args.category }}>{{ c }}</option>{% endfor %}
+      {% for c in categories %}<option value="{{ c.id }}" {{ 'selected' if c.id|string == args.category }}>{{ c.name }}{% if not c.is_active %} (inactiva){% endif %}</option>{% endfor %}
     </select></label>
   <label class="field"><span class="label">Estado</span>
     <select name="estado">
       <option value="active" {{ 'selected' if args.status == 'active' }}>Activos</option>
-      <option value="archived" {{ 'selected' if args.status == 'archived' }}>Archivados</option>
+      <option value="inactive" {{ 'selected' if args.status == 'inactive' }}>Desactivados</option>
       <option value="all" {{ 'selected' if args.status == 'all' }}>Todos</option>
     </select></label>
   <label class="check"><input type="checkbox" name="escasez" value="1" {{ 'checked' if args.low_only }}> Solo escasez</label>
@@ -36,7 +36,7 @@
         <th class="{{ cls }}"><a href="{{ url_for('products.index', **sort_params(key, nxt)) }}">{{ label }}{% if args.sort == key %} {{ '▲' if args.direction == 'asc' else '▼' }}{% endif %}</a></th>
       {% endmacro %}
       {{ sortable('sku', 'SKU') }}{{ sortable('name', 'Producto') }}{{ sortable('category', 'Categoría') }}
-      {{ sortable('stock', 'Stock', 'num') }}<th class="num">Mínimo</th><th>Estado</th>{{ sortable('price', 'Precio', 'num') }}<th></th>
+      {{ sortable('stock', 'Stock', 'num') }}{{ sortable('available', 'Disponible', 'num') }}<th class="num">Mínimo</th><th>Estado</th>{{ sortable('price', 'Precio', 'num') }}<th></th>
     </tr></thead>
     <tbody>
     {% for p in rows %}
@@ -46,15 +46,16 @@
           {% if p.brand %}<small class="muted block">{{ p.brand }}{% if p.location %} · {{ p.location }}{% endif %}</small>{% endif %}</td>
         <td>{{ p.category or '—' }}</td>
         <td class="num"><strong>{{ p.stock|num }}</strong></td>
+        <td class="num">{{ p.available|num }}{% if p.reserved %}<small class="muted block">{{ p.reserved|num }} reserv.</small>{% endif %}</td>
         <td class="num">{{ p.min_stock|num }}</td>
-        <td>{% if p.is_active %}{{ status_badge(p.stock, p.min_stock) }}{% else %}<span class="badge badge-muted">Archivado</span>{% endif %}</td>
+        <td>{% if p.is_active %}{{ status_badge(p.available, p.min_stock) }}{% else %}<span class="badge badge-muted">Desactivado</span>{% endif %}</td>
         <td class="num">{{ p.price_cents|money }}</td>
         <td class="actions">
-          {% if can('movements.create') and p.is_active %}<a href="{{ url_for('movements.create', sku=p.sku) }}">Mover</a>{% endif %}
+          {% if can('movements.create') and p.is_active %}<a href="{{ url_for('movements.create', sku=p.sku) }}">Registrar movimiento</a>{% endif %}
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="8" class="empty">No se encontraron productos con esos filtros.</td></tr>
+      <tr><td colspan="9" class="empty">No se encontraron productos con esos filtros.</td></tr>
     {% endfor %}
     </tbody>
   </table>

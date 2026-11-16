@@ -3,7 +3,7 @@ from __future__ import annotations
 
 
 def register(app) -> None:
-    from . import alerts, audit, auth, dashboard, movements, products, reports, users
+    from . import alerts, audit, auth, categories, dashboard, movements, products, reports, users
 
-    for module in (auth, dashboard, products, movements, alerts, reports, users, audit):
+    for module in (auth, dashboard, products, categories, movements, alerts, reports, users, audit):
         app.register_blueprint(module.bp)

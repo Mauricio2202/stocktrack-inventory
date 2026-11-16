@@ -9,19 +9,25 @@ from functools import wraps
 
 from flask import abort, flash, g, redirect, request, session, url_for
 
-ALL_ROLES = ("admin", "gerente", "almacenista", "consulta")
+ALL_ROLES = ("admin", "encargado", "consulta")
+STAFF = ("admin", "encargado")
 
-# Matriz de permisos: permiso -> roles que lo tienen.
+# Matriz de permisos (requerimientos por usuario): permiso -> roles que lo tienen.
 PERMISSIONS: dict[str, tuple[str, ...]] = {
-    "products.view": ALL_ROLES,
-    "products.edit": ("admin", "gerente"),
-    "movements.view": ALL_ROLES,
-    "movements.create": ("admin", "gerente", "almacenista"),
-    "alerts.view": ALL_ROLES,
-    "alerts.ack": ("admin", "gerente", "almacenista"),
-    "reports.view": ALL_ROLES,
-    "users.manage": ("admin",),
-    "audit.view": ("admin", "gerente"),
+    "dashboard.view": ALL_ROLES,                 # RF-02, RF-18, RF-30
+    "products.view": ALL_ROLES,                  # RF-05, RF-19, RF-31..32, RF-34
+    "products.edit": ("admin",),                 # RF-06, RF-07, RF-09
+    "categories.view": ALL_ROLES,                # RF-33
+    "categories.edit": ("admin",),               # RF-08
+    "movements.view": STAFF,                     # RF-10, RF-23
+    "movements.create": ("encargado",),          # RF-20..22: lo registra el encargado
+    "reservations.validate": ("admin",),         # RF-16
+    "alerts.view": STAFF,                        # RF-11, RF-24
+    "alerts.attend": ("encargado",),             # RF-25
+    "reports.view": STAFF,                       # RF-12, RF-26
+    "reports.admin": ("admin",),                 # RF-13: diarios, mensuales, reservas, devoluciones
+    "users.manage": ("admin",),                  # RF-03, RF-04
+    "audit.view": ("admin",),                    # RF-15
 }
 
 

@@ -4,12 +4,11 @@ from __future__ import annotations
 import datetime as dt
 import random
 
-from .models import products, stock, users
+from .models import categories, products, stock, users
 
 DEMO_USERS = [
-    ("admin", "Ana Garza (Administración)", "admin@stocktrack.local", "admin", "Admin12345", True),
-    ("gerente", "Carlos Treviño (Gerente)", "gerente@stocktrack.local", "gerente", "Gerente12345", True),
-    ("almacen", "Luis Cantú (Almacén)", "almacen@stocktrack.local", "almacenista", "Almacen12345", False),
+    ("admin", "Ana Garza (Administrador)", "admin@stocktrack.local", "admin", "Admin12345", True),
+    ("encargado", "Luis Cantú (Encargado de inventario)", "encargado@stocktrack.local", "encargado", "Encargado12345", True),
     ("consulta", "Sofía Elizondo (Consulta)", "consulta@stocktrack.local", "consulta", "Consulta12345", False),
 ]
 
@@ -73,15 +72,16 @@ def seed(db, config: dict, *, force: bool = False) -> str:
     conn = db.connect()
     try:
         ids: dict[str, int] = {}
-        for username, full_name, email, role, password, alerts_on in DEMO_USERS:
-            existing = users.get_by_username(conn, username)
-            ids[username] = existing["id"] if existing else users.create(
-                conn, username=username, full_name=full_name, email=email, password=password, role=role,
+        for key, full_name, email, role, password, alerts_on in DEMO_USERS:
+            existing = users.get_by_email(conn, email)
+            ids[key] = existing["id"] if existing else users.create(
+                conn, full_name=full_name, email=email, password=password, role=role,
                 receive_alerts=alerts_on, min_password_length=config["PASSWORD_MIN_LENGTH"])
         if products.count_active(conn) and not force:
             return "Ya existen productos; no se cargó el catálogo (usa --force para forzarlo)."
 
-        actor = {"id": ids["gerente"], "username": "gerente", "ip": None}
+        actor = {"id": ids["admin"], "email": "admin@stocktrack.local", "ip": None}
+        cat_ids: dict[str, int] = {}
         counters: dict[str, int] = {}
         now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
         created = 0
@@ -92,8 +92,11 @@ def seed(db, config: dict, *, force: bool = False) -> str:
             if products.get_by_sku(conn, sku):
                 continue
             location = f"{prefix[0]}{counters[prefix]:02d}-{rng.randint(1, 4)}"
+            if category not in cat_ids:
+                row = conn.one("SELECT id FROM categories WHERE LOWER(name) = LOWER(?)", (category,))
+                cat_ids[category] = row["id"] if row else categories.create(conn, category, actor)
             data = products.clean_form({
-                "sku": sku, "name": name, "category": category, "brand": brand, "location": location,
+                "sku": sku, "name": name, "category_id": str(cat_ids[category]), "brand": brand, "location": location,
                 "min_stock": minimum, "cost": cost, "price": price, "initial_stock": current + sold,
             }, with_initial_stock=True)
             product_id = products.create(conn, data, actor, config["MAX_ACTIVE_RECORDS"])
@@ -106,8 +109,8 @@ def seed(db, config: dict, *, force: bool = False) -> str:
             remaining = sold
             while remaining > 0:
                 qty = min(remaining, rng.randint(1, 3))
-                result = stock.register_movement(conn, product_id, "salida", qty,
-                                                 {"id": ids["almacen"], "username": "almacen", "ip": None},
+                result = stock.register_movement(conn, product_id, "venta", qty,
+                                                 {"id": ids["encargado"], "email": "encargado@stocktrack.local", "ip": None},
                                                  reference=f"VTA-{rng.randint(1000, 9999)}")
                 moment += dt.timedelta(hours=rng.randint(6, 40))
                 with conn.transaction():

@@ -17,6 +17,30 @@
     });
   });
 
+  // RNF-04: cierre por inactividad. El servidor es quien decide; aquí solo se mantiene viva la
+  // sesión mientras hay actividad y se redirige al login cuando ya expiró.
+  var idleSeconds = parseInt(document.body.getAttribute("data-idle-seconds") || "0", 10);
+  if (idleSeconds > 0) {
+    var lastActivity = Date.now(), lastPing = Date.now();
+    var token = (document.querySelector("meta[name='csrf-token']") || {}).content || "";
+    ["click", "keydown", "mousemove", "touchstart", "scroll"].forEach(function (name) {
+      document.addEventListener(name, function () { lastActivity = Date.now(); }, { passive: true });
+    });
+    setInterval(function () {
+      var now = Date.now();
+      if (now - lastActivity > idleSeconds * 1000) {
+        window.location.href = document.body.getAttribute("data-login-url");
+      } else if (lastActivity > lastPing && now - lastPing > 60000) {
+        lastPing = now;
+        fetch(document.body.getAttribute("data-ping-url"), {
+          method: "POST", credentials: "same-origin", headers: { "X-CSRF-Token": token }
+        }).then(function (r) {
+          if (r.status === 401) window.location.href = document.body.getAttribute("data-login-url");
+        }).catch(function () {});
+      }
+    }, 15000);
+  }
+
   // Autocompletado de SKU en el formulario de movimientos
   var input = document.getElementById("sku-input");
   var list = document.getElementById("sku-suggestions");
